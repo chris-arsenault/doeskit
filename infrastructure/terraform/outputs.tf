@@ -8,11 +8,6 @@ output "api_url" {
   value       = "https://${local.api_domain}"
 }
 
-output "dynamodb_table" {
-  description = "DynamoDB table name"
-  value       = aws_dynamodb_table.dosekit.name
-}
-
 output "lambda_function" {
   description = "Lambda function name"
   value       = aws_lambda_function.api.function_name

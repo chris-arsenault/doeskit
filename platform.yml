@@ -1,0 +1,3 @@
+project: dosekit
+prefix: dosekit
+migrations: db/migrations

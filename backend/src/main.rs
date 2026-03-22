@@ -8,7 +8,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
 pub struct AppState {
-    pub db: db::DynamoClient,
+    pub db: db::PgPool,
 }
 
 #[tokio::main]
@@ -18,12 +18,11 @@ async fn main() -> Result<(), lambda_http::Error> {
         .json()
         .init();
 
-    let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
-    let dynamo = aws_sdk_dynamodb::Client::new(&config);
-    let table = std::env::var("DOSEKIT_TABLE").unwrap_or_else(|_| "dosekit".into());
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set");
 
     let state = Arc::new(AppState {
-        db: db::DynamoClient::new(dynamo, table),
+        db: db::PgPool::new(database_url),
     });
 
     let cors = CorsLayer::new()

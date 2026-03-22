@@ -54,6 +54,12 @@ fi
 
 echo "    Frontend build OK"
 
+# ── Run database migrations ──────────────────────────────────────────
+echo ""
+echo "==> Running database migrations"
+cd "${ROOT_DIR}"
+db-migrate
+
 # ── Deploy with Terraform ────────────────────────────────────────────
 echo ""
 echo "==> Running Terraform"

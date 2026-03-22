@@ -127,11 +127,3 @@ pub struct HistoryQuery {
     pub days: Option<u32>,
 }
 
-// ── Seed ────────────────────────────────────────────────────
-
-#[derive(Debug, Deserialize)]
-pub struct SeedData {
-    pub training_schedule: TrainingSchedule,
-    pub cycles: Vec<Cycle>,
-    pub supplements: Vec<Supplement>,
-}

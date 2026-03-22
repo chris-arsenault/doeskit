@@ -24,7 +24,6 @@ pub fn api_routes() -> Router<Arc<AppState>> {
         .route("/schedule", get(get_schedule))
         .route("/schedule", post(set_schedule))
         .route("/history", get(get_history))
-        .route("/seed", post(run_seed))
         .route("/health", get(health))
 }
 
@@ -208,49 +207,6 @@ async fn set_schedule(
         Ok(_) => StatusCode::OK,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
-}
-
-// ── Seed ────────────────────────────────────────────────────
-
-async fn run_seed(State(state): State<Arc<AppState>>) -> StatusCode {
-    let seed_json = include_str!("../seed.json");
-    let seed: SeedData = match serde_json::from_str(seed_json) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("Failed to parse seed.json: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-    };
-
-    // Write training schedule
-    if let Err(e) = state.db.put_config("training_schedule", &seed.training_schedule).await {
-        tracing::error!("Failed to seed training schedule: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR;
-    }
-
-    // Write cycles
-    for cycle in &seed.cycles {
-        if let Err(e) = state.db.put_cycle(cycle).await {
-            tracing::error!("Failed to seed cycle {}: {e}", cycle.name);
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-    }
-
-    // Write supplements
-    for supp in &seed.supplements {
-        if let Err(e) = state.db.put_supplement(supp).await {
-            tracing::error!("Failed to seed supplement {}: {e}", supp.name);
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-    }
-
-    tracing::info!(
-        "Seeded {} cycles, {} supplements, training schedule {:?}",
-        seed.cycles.len(),
-        seed.supplements.len(),
-        seed.training_schedule.days
-    );
-    StatusCode::OK
 }
 
 // ── History ─────────────────────────────────────────────────

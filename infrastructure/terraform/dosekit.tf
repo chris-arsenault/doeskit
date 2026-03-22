@@ -20,6 +20,34 @@ data "aws_ssm_parameter" "cognito_user_pool_id" {
   name = "/platform/cognito/user-pool-id"
 }
 
+data "aws_ssm_parameter" "vpc_id" {
+  name = "/platform/network/vpc-id"
+}
+
+data "aws_ssm_parameter" "private_subnet_ids" {
+  name = "/platform/network/private-subnet-ids"
+}
+
+data "aws_ssm_parameter" "rds_address" {
+  name = "/platform/rds/address"
+}
+
+data "aws_ssm_parameter" "rds_port" {
+  name = "/platform/rds/port"
+}
+
+data "aws_ssm_parameter" "rds_master_username" {
+  name = "/platform/rds/master-username"
+}
+
+data "aws_ssm_parameter" "rds_master_password" {
+  name = "/platform/rds/master-password"
+}
+
+data "aws_ssm_parameter" "rds_security_group_id" {
+  name = "/platform/rds/security-group-id"
+}
+
 # ── Cognito client (self-service per INTEGRATION.md Step 6) ──
 
 resource "aws_cognito_user_pool_client" "app" {
@@ -33,26 +61,18 @@ resource "aws_cognito_user_pool_client" "app" {
   ]
 }
 
-# ── DynamoDB ─────────────────────────────────────────────────
+# ── Lambda security group ───────────────────────────────────
 
-resource "aws_dynamodb_table" "dosekit" {
-  name         = "dosekit"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "PK"
-  range_key    = "SK"
+resource "aws_security_group" "lambda" {
+  name        = "dosekit-lambda"
+  description = "Dosekit API Lambda"
+  vpc_id      = nonsensitive(data.aws_ssm_parameter.vpc_id.value)
 
-  attribute {
-    name = "PK"
-    type = "S"
-  }
-
-  attribute {
-    name = "SK"
-    type = "S"
-  }
-
-  point_in_time_recovery {
-    enabled = true
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
@@ -79,29 +99,9 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy" "lambda_dynamo" {
-  name = "dosekit-lambda-dynamo"
-  role = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:DeleteItem",
-          "dynamodb:Query",
-          "dynamodb:Scan",
-        ]
-        Resource = [
-          aws_dynamodb_table.dosekit.arn,
-          "${aws_dynamodb_table.dosekit.arn}/index/*",
-        ]
-      }
-    ]
-  })
+resource "aws_iam_role_policy_attachment" "lambda_vpc" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 # ── Lambda function ──────────────────────────────────────────
@@ -117,10 +117,15 @@ resource "aws_lambda_function" "api" {
   timeout          = 30
   memory_size      = 256
 
+  vpc_config {
+    subnet_ids         = split(",", nonsensitive(data.aws_ssm_parameter.private_subnet_ids.value))
+    security_group_ids = [aws_security_group.lambda.id]
+  }
+
   environment {
     variables = {
-      DOSEKIT_TABLE = aws_dynamodb_table.dosekit.name
-      RUST_LOG      = "info"
+      DATABASE_URL = "postgresql://${nonsensitive(data.aws_ssm_parameter.rds_master_username.value)}:${data.aws_ssm_parameter.rds_master_password.value}@${nonsensitive(data.aws_ssm_parameter.rds_address.value)}:${nonsensitive(data.aws_ssm_parameter.rds_port.value)}/dosekit?sslmode=require"
+      RUST_LOG     = "info"
     }
   }
 }
@@ -154,7 +159,7 @@ locals {
   cognito_jwks    = "${local.cognito_issuer}/.well-known/jwks.json"
 }
 
-# CORS preflight — OPTIONS must pass without auth (no Bearer token on preflight)
+# CORS preflight — OPTIONS must pass without auth
 resource "aws_lb_listener_rule" "api_cors" {
   listener_arn = nonsensitive(data.aws_ssm_parameter.alb_listener_arn.value)
   priority     = 200
