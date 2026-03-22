@@ -32,7 +32,7 @@ async fn main() -> Result<(), lambda_http::Error> {
         .allow_headers(Any);
 
     let app = Router::new()
-        .nest("/api", routes::api_routes())
+        .merge(routes::api_routes())
         .layer(cors)
         .with_state(state);
 
