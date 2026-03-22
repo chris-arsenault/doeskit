@@ -20,8 +20,17 @@ data "aws_ssm_parameter" "cognito_user_pool_id" {
   name = "/platform/cognito/user-pool-id"
 }
 
-data "aws_ssm_parameter" "cognito_client_dosekit" {
-  name = "/platform/cognito/clients/dosekit"
+# ── Cognito client (self-service per INTEGRATION.md Step 6) ──
+
+resource "aws_cognito_user_pool_client" "app" {
+  name         = "dosekit-app"
+  user_pool_id = nonsensitive(data.aws_ssm_parameter.cognito_user_pool_id.value)
+
+  explicit_auth_flows = [
+    "ALLOW_USER_PASSWORD_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH",
+    "ALLOW_USER_SRP_AUTH"
+  ]
 }
 
 # ── DynamoDB ─────────────────────────────────────────────────
@@ -257,6 +266,6 @@ module "frontend" {
   runtime_config = {
     apiBaseUrl        = "https://${local.api_domain}"
     cognitoUserPoolId = local.cognito_pool_id
-    cognitoClientId   = nonsensitive(data.aws_ssm_parameter.cognito_client_dosekit.value)
+    cognitoClientId   = aws_cognito_user_pool_client.app.id
   }
 }
