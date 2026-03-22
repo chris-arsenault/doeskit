@@ -3,9 +3,9 @@ output "site_url" {
   value       = module.frontend.website_url
 }
 
-output "api_endpoint" {
-  description = "API Gateway endpoint"
-  value       = module.api.api_endpoint
+output "api_url" {
+  description = "API URL (via shared ALB)"
+  value       = "https://${local.api_domain}"
 }
 
 output "dynamodb_table" {
@@ -13,12 +13,7 @@ output "dynamodb_table" {
   value       = aws_dynamodb_table.dosekit.name
 }
 
-output "cognito_user_pool_id" {
-  description = "Cognito User Pool ID"
-  value       = local.cognito_user_pool_id
-}
-
-output "cognito_client_id" {
-  description = "Cognito Client ID"
-  value       = local.cognito_client_id
+output "lambda_function" {
+  description = "Lambda function name"
+  value       = aws_lambda_function.api.function_name
 }
