@@ -21,7 +21,10 @@ pub fn api_routes() -> Router<Arc<AppState>> {
         .route("/cycles", get(list_cycles))
         .route("/cycles", post(create_cycle))
         .route("/cycles/{id}", delete(delete_cycle))
+        .route("/schedule", get(get_schedule))
+        .route("/schedule", post(set_schedule))
         .route("/history", get(get_history))
+        .route("/seed", post(run_seed))
         .route("/health", get(health))
 }
 
@@ -36,7 +39,14 @@ async fn get_today(State(state): State<Arc<AppState>>) -> AppResult<TodayRespons
     let supplements = state.db.list_supplements().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let cycles = state.db.list_cycles().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let logs = state.db.get_logs_for_date(&today).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let schedule: TrainingSchedule = state
+        .db
+        .get_config("training_schedule")
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .unwrap_or(TrainingSchedule { days: vec![] });
 
+    let is_training_day = check_training_day(&schedule, &today);
     let active_supplements = filter_active_supplements(&supplements, &cycles, &today);
 
     let supplement_statuses: Vec<SupplementStatus> = active_supplements
@@ -75,6 +85,7 @@ async fn get_today(State(state): State<Arc<AppState>>) -> AppResult<TodayRespons
 
     Ok(Json(TodayResponse {
         date: today,
+        is_training_day,
         supplements: supplement_statuses,
         sleep,
         energy: EnergyStatus {
@@ -121,6 +132,9 @@ async fn create_supplement(
         unit: req.unit,
         active: true,
         cycle_id: req.cycle_id,
+        timing: req.timing,
+        training_day_only: req.training_day_only,
+        notes: req.notes,
     };
     state
         .db
@@ -174,6 +188,71 @@ async fn delete_cycle(State(state): State<Arc<AppState>>, Path(id): Path<String>
     }
 }
 
+// ── Training schedule ───────────────────────────────────────
+
+async fn get_schedule(State(state): State<Arc<AppState>>) -> AppResult<TrainingSchedule> {
+    let schedule = state
+        .db
+        .get_config::<TrainingSchedule>("training_schedule")
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .unwrap_or(TrainingSchedule { days: vec![] });
+    Ok(Json(schedule))
+}
+
+async fn set_schedule(
+    State(state): State<Arc<AppState>>,
+    Json(schedule): Json<TrainingSchedule>,
+) -> StatusCode {
+    match state.db.put_config("training_schedule", &schedule).await {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+// ── Seed ────────────────────────────────────────────────────
+
+async fn run_seed(State(state): State<Arc<AppState>>) -> StatusCode {
+    let seed_json = include_str!("../seed.json");
+    let seed: SeedData = match serde_json::from_str(seed_json) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("Failed to parse seed.json: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
+    };
+
+    // Write training schedule
+    if let Err(e) = state.db.put_config("training_schedule", &seed.training_schedule).await {
+        tracing::error!("Failed to seed training schedule: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
+
+    // Write cycles
+    for cycle in &seed.cycles {
+        if let Err(e) = state.db.put_cycle(cycle).await {
+            tracing::error!("Failed to seed cycle {}: {e}", cycle.name);
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
+    }
+
+    // Write supplements
+    for supp in &seed.supplements {
+        if let Err(e) = state.db.put_supplement(supp).await {
+            tracing::error!("Failed to seed supplement {}: {e}", supp.name);
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
+    }
+
+    tracing::info!(
+        "Seeded {} cycles, {} supplements, training schedule {:?}",
+        seed.cycles.len(),
+        seed.supplements.len(),
+        seed.training_schedule.days
+    );
+    StatusCode::OK
+}
+
 // ── History ─────────────────────────────────────────────────
 
 async fn get_history(
@@ -207,16 +286,13 @@ async fn get_history(
 
         match log.r#type.as_str() {
             "sleep" => entry.sleep = log.value.as_i64().map(|v| v as i32),
-            "energy" => {
-                // running average computed below
-            }
+            "energy" => {}
             "workout" if log.id == "done" => entry.workout = log.value.as_bool(),
             "supplement" if log.value == serde_json::json!(true) => entry.supplements_taken += 1,
             _ => {}
         }
     }
 
-    // compute energy averages per day
     for (date, summary) in summaries.iter_mut() {
         let energy_logs: Vec<i64> = logs
             .iter()
@@ -229,6 +305,17 @@ async fn get_history(
     }
 
     Ok(Json(summaries.into_values().rev().collect()))
+}
+
+// ── Training schedule logic ─────────────────────────────────
+
+fn check_training_day(schedule: &TrainingSchedule, date_str: &str) -> bool {
+    let date = match chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+        Ok(d) => d,
+        Err(_) => return false,
+    };
+    let weekday = date.format("%A").to_string().to_lowercase();
+    schedule.days.iter().any(|d| d.to_lowercase() == weekday)
 }
 
 // ── Cycle logic ─────────────────────────────────────────────

@@ -10,6 +10,9 @@ export type Supplement = {
   unit: string;
   active: boolean;
   cycle_id?: string;
+  timing: string;
+  training_day_only: boolean;
+  notes?: string;
 };
 
 export type Cycle = {
@@ -18,6 +21,10 @@ export type Cycle = {
   weeks_on: number;
   weeks_off: number;
   start_date: string;
+};
+
+export type TrainingSchedule = {
+  days: string[];
 };
 
 export type LogEntry = {
@@ -29,6 +36,7 @@ export type LogEntry = {
 
 export type TodayState = {
   date: string;
+  is_training_day: boolean;
   supplements: Array<{ supplement: Supplement; taken: boolean }>;
   sleep: number | null;
   energy: { morning: number | null; afternoon: number | null; evening: number | null };
@@ -44,11 +52,13 @@ type DosekitStore = {
   today: TodayState | null;
   supplements: Supplement[];
   cycles: Cycle[];
+  schedule: TrainingSchedule;
 
   _setToken: (token: string) => void;
   refresh: () => Promise<void>;
   loadSupplements: () => Promise<void>;
   loadCycles: () => Promise<void>;
+  loadSchedule: () => Promise<void>;
   logEntry: (type: string, id: string, value: unknown) => Promise<void>;
 };
 
@@ -59,6 +69,7 @@ export const useStore = create<DosekitStore>((set, get) => ({
   today: null,
   supplements: [],
   cycles: [],
+  schedule: { days: [] },
 
   _setToken: (token: string) => {
     set({ token });
@@ -83,6 +94,11 @@ export const useStore = create<DosekitStore>((set, get) => ({
   loadCycles: async () => {
     const cycles = await apiGet<Cycle[]>("/cycles");
     set({ cycles });
+  },
+
+  loadSchedule: async () => {
+    const schedule = await apiGet<TrainingSchedule>("/schedule");
+    set({ schedule });
   },
 
   logEntry: async (type: string, id: string, value: unknown) => {

@@ -10,6 +10,12 @@ pub struct Supplement {
     pub unit: String,
     pub active: bool,
     pub cycle_id: Option<String>,
+    #[serde(default)]
+    pub timing: String,
+    #[serde(default)]
+    pub training_day_only: bool,
+    #[serde(default)]
+    pub notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -18,6 +24,16 @@ pub struct CreateSupplement {
     pub dose: String,
     pub unit: String,
     pub cycle_id: Option<String>,
+    #[serde(default = "default_timing")]
+    pub timing: String,
+    #[serde(default)]
+    pub training_day_only: bool,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+fn default_timing() -> String {
+    "morning".into()
 }
 
 // ── Cycle ───────────────────────────────────────────────────
@@ -37,6 +53,13 @@ pub struct CreateCycle {
     pub weeks_on: u32,
     pub weeks_off: u32,
     pub start_date: String,
+}
+
+// ── Training schedule ───────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrainingSchedule {
+    pub days: Vec<String>,
 }
 
 // ── Log entries ─────────────────────────────────────────────
@@ -61,6 +84,7 @@ pub struct LogEntry {
 #[derive(Debug, Serialize)]
 pub struct TodayResponse {
     pub date: String,
+    pub is_training_day: bool,
     pub supplements: Vec<SupplementStatus>,
     pub sleep: Option<i32>,
     pub energy: EnergyStatus,
@@ -101,4 +125,13 @@ pub struct DaySummary {
 #[derive(Debug, Deserialize)]
 pub struct HistoryQuery {
     pub days: Option<u32>,
+}
+
+// ── Seed ────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct SeedData {
+    pub training_schedule: TrainingSchedule,
+    pub cycles: Vec<Cycle>,
+    pub supplements: Vec<Supplement>,
 }

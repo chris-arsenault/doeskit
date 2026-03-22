@@ -61,7 +61,10 @@ module "api" {
     "GET /api/cycles",
     "POST /api/cycles",
     "DELETE /api/cycles/{id}",
+    "GET /api/schedule",
+    "POST /api/schedule",
     "GET /api/history",
+    "POST /api/seed",
   ]
 
   cors_allow_origins  = local.cors_allow_origins

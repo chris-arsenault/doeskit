@@ -30,7 +30,7 @@ impl DynamoClient {
         Ok(result
             .items()
             .iter()
-            .filter_map(|item| supplement_from_item(item))
+            .filter_map(|item| item_from_data(item))
             .collect())
     }
 
@@ -38,13 +38,6 @@ impl DynamoClient {
         let mut item = HashMap::new();
         item.insert("PK".into(), AttributeValue::S("SUPP".into()));
         item.insert("SK".into(), AttributeValue::S(supp.id.clone()));
-        item.insert("name".into(), AttributeValue::S(supp.name.clone()));
-        item.insert("dose".into(), AttributeValue::S(supp.dose.clone()));
-        item.insert("unit".into(), AttributeValue::S(supp.unit.clone()));
-        item.insert("active".into(), AttributeValue::Bool(supp.active));
-        if let Some(ref cid) = supp.cycle_id {
-            item.insert("cycle_id".into(), AttributeValue::S(cid.clone()));
-        }
         item.insert("data".into(), AttributeValue::S(serde_json::to_string(supp).unwrap()));
 
         self.client
@@ -82,7 +75,7 @@ impl DynamoClient {
         Ok(result
             .items()
             .iter()
-            .filter_map(|item| cycle_from_item(item))
+            .filter_map(|item| item_from_data(item))
             .collect())
     }
 
@@ -107,6 +100,42 @@ impl DynamoClient {
             .table_name(&self.table)
             .key("PK", AttributeValue::S("CYCLE".into()))
             .key("SK", AttributeValue::S(id.into()))
+            .send()
+            .await?;
+        Ok(())
+    }
+
+    // ── Config ──────────────────────────────────────────────
+
+    pub async fn get_config<T: serde::de::DeserializeOwned>(&self, key: &str) -> Result<Option<T>, Error> {
+        let result = self
+            .client
+            .get_item()
+            .table_name(&self.table)
+            .key("PK", AttributeValue::S("CONFIG".into()))
+            .key("SK", AttributeValue::S(key.into()))
+            .send()
+            .await?;
+
+        match result.item() {
+            Some(item) => {
+                let data = get_s(item, "data");
+                Ok(data.and_then(|d| serde_json::from_str(&d).ok()))
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub async fn put_config<T: serde::Serialize>(&self, key: &str, value: &T) -> Result<(), Error> {
+        let mut item = HashMap::new();
+        item.insert("PK".into(), AttributeValue::S("CONFIG".into()));
+        item.insert("SK".into(), AttributeValue::S(key.into()));
+        item.insert("data".into(), AttributeValue::S(serde_json::to_string(value).unwrap()));
+
+        self.client
+            .put_item()
+            .table_name(&self.table)
+            .set_item(Some(item))
             .send()
             .await?;
         Ok(())
@@ -181,21 +210,7 @@ fn get_s(item: &HashMap<String, AttributeValue>, key: &str) -> Option<String> {
     item.get(key)?.as_s().ok().cloned()
 }
 
-fn supplement_from_item(item: &HashMap<String, AttributeValue>) -> Option<Supplement> {
-    if let Some(data) = get_s(item, "data") {
-        return serde_json::from_str(&data).ok();
-    }
-    Some(Supplement {
-        id: get_s(item, "SK")?,
-        name: get_s(item, "name")?,
-        dose: get_s(item, "dose")?,
-        unit: get_s(item, "unit")?,
-        active: item.get("active")?.as_bool().ok().copied().unwrap_or(true),
-        cycle_id: get_s(item, "cycle_id"),
-    })
-}
-
-fn cycle_from_item(item: &HashMap<String, AttributeValue>) -> Option<Cycle> {
+fn item_from_data<T: serde::de::DeserializeOwned>(item: &HashMap<String, AttributeValue>) -> Option<T> {
     let data = get_s(item, "data")?;
     serde_json::from_str(&data).ok()
 }
