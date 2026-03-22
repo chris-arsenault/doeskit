@@ -2,14 +2,6 @@
        lint-frontend lint-fix-frontend format-frontend format-check-frontend \
        lint-backend format-backend build-frontend build-backend
 
-# ── Development ──────────────────────────────────────────────
-
-dev-frontend:
-	cd frontend && npx vite
-
-dev-backend:
-	cd backend && cargo lambda watch --port 8000
-
 # ── Build ────────────────────────────────────────────────────
 
 build: build-frontend build-backend

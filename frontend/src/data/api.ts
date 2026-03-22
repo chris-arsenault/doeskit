@@ -1,7 +1,7 @@
 import { config } from "../config";
 import { getToken } from "../auth";
 
-export const API_BASE = config.apiBaseUrl || "/api";
+export const API_BASE = config.apiBaseUrl;
 
 export async function apiPost<T = unknown>(path: string, body?: unknown): Promise<T> {
   const token = await getToken();
