@@ -24,7 +24,11 @@ if [ -d "dist" ]; then
   rm -rf dist
 fi
 
-npm ci --silent
+if [ -f "package-lock.json" ]; then
+  npm ci
+else
+  npm install
+fi
 npm run build
 
 # Sanity check: dist exists
