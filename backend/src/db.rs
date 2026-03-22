@@ -1,4 +1,5 @@
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::Client;
+use std::sync::Arc;
 
 use crate::models::*;
 
@@ -13,14 +14,14 @@ impl PgPool {
     }
 
     async fn connect(&self) -> Result<Client, Error> {
-        // Use native-tls for RDS SSL
-        let tls_connector = native_tls::TlsConnector::builder()
-            .danger_accept_invalid_certs(true) // RDS certs
-            .build()
-            .map_err(|e| Error::Db(e.to_string()))?;
-        let connector = postgres_native_tls::MakeTlsConnector::new(tls_connector);
+        let tls_config = rustls::ClientConfig::builder()
+            .with_root_certificates(rustls::RootCertStore::from_iter(
+                webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
+            ))
+            .with_no_client_auth();
+        let tls = tokio_postgres_rustls::MakeRustlsConnect::new(tls_config);
 
-        let (client, connection) = tokio_postgres::connect(&self.database_url, connector)
+        let (client, connection) = tokio_postgres::connect(&self.database_url, tls)
             .await
             .map_err(|e| Error::Db(e.to_string()))?;
 
