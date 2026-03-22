@@ -192,9 +192,9 @@ resource "aws_lb_listener_rule" "api" {
     type  = "jwt-validation"
     order = 1
 
-    jwt_validation_config {
-      jwks_endpoint = local.cognito_jwks
+    jwt_validation {
       issuer        = local.cognito_issuer
+      jwks_endpoint = local.cognito_jwks
     }
   }
 
