@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # ensure-state-bucket.sh - Create/verify the S3 state bucket for Terraform remote state.
+# Follows platform-control naming convention: tf-state-{prefix}-{account_id}
 #
 # Usage:
 #   source scripts/ensure-state-bucket.sh
 #
-# The bucket name and region are hardcoded to match main.tf backend config.
+# Exports STATE_BUCKET and STATE_REGION for use in deploy.sh.
 
 set -euo pipefail
 
-STATE_BUCKET="ahara-terraform-state"
-STATE_REGION="us-east-1"
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+STATE_BUCKET="${STATE_BUCKET:-tf-state-dosekit-${AWS_ACCOUNT_ID}}"
+STATE_REGION="${STATE_REGION:-us-east-1}"
+
+export STATE_BUCKET STATE_REGION
 
 echo "State bucket: ${STATE_BUCKET}"
 echo "State region: ${STATE_REGION}"

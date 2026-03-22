@@ -54,7 +54,9 @@ source "$SCRIPT_DIR/ensure-state-bucket.sh"
 echo ""
 echo "==> Running Terraform"
 cd "$PROJECT_ROOT/infrastructure/terraform"
-terraform init
+terraform init \
+  -backend-config="bucket=${STATE_BUCKET}" \
+  -backend-config="region=${STATE_REGION}"
 terraform apply
 
 echo ""

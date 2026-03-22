@@ -9,9 +9,8 @@ terraform {
   }
 
   backend "s3" {
-    bucket       = "ahara-terraform-state"
-    key          = "dosekit/terraform.tfstate"
     region       = "us-east-1"
+    key          = "dosekit.tfstate"
     encrypt      = true
     use_lockfile = true
   }

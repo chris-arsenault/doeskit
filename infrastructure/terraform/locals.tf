@@ -15,7 +15,7 @@ locals {
   lambda_timeout       = 30
   lambda_memory        = 256
 
-  # Cognito (shared platform user pool)
-  cognito_user_pool_id = data.aws_ssm_parameter.cognito_user_pool_id.value
-  cognito_client_id    = data.aws_ssm_parameter.cognito_client_id.value
+  # Cognito (shared platform user pool via SSM)
+  cognito_user_pool_id = nonsensitive(data.aws_ssm_parameter.cognito_user_pool_id.value)
+  cognito_client_id    = nonsensitive(data.aws_ssm_parameter.cognito_client_dosekit.value)
 }

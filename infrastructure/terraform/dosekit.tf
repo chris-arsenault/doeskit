@@ -4,8 +4,8 @@ data "aws_ssm_parameter" "cognito_user_pool_id" {
   name = "/platform/cognito/user-pool-id"
 }
 
-data "aws_ssm_parameter" "cognito_client_id" {
-  name = "/platform/cognito/dosekit-client-id"
+data "aws_ssm_parameter" "cognito_client_dosekit" {
+  name = "/platform/cognito/clients/dosekit"
 }
 
 # ── DynamoDB ─────────────────────────────────────────────────
