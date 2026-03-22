@@ -1,5 +1,4 @@
 use tokio_postgres::Client;
-use std::sync::Arc;
 
 use crate::models::*;
 
@@ -14,16 +13,22 @@ impl PgPool {
     }
 
     async fn connect(&self) -> Result<Client, Error> {
+        let pem = include_bytes!("../certs/rds-global-bundle.pem");
+        let certs = rustls_pemfile::certs(&mut &pem[..])
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| Error::Db(format!("Failed to parse RDS CA bundle: {e}")))?;
+        let mut root_store = rustls::RootCertStore::empty();
+        for cert in certs {
+            root_store.add(cert).map_err(|e| Error::Db(format!("Failed to add RDS cert: {e}")))?;
+        }
         let tls_config = rustls::ClientConfig::builder()
-            .with_root_certificates(rustls::RootCertStore::from_iter(
-                webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
-            ))
+            .with_root_certificates(root_store)
             .with_no_client_auth();
         let tls = tokio_postgres_rustls::MakeRustlsConnect::new(tls_config);
 
         let (client, connection) = tokio_postgres::connect(&self.database_url, tls)
             .await
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
 
         tokio::spawn(async move {
             if let Err(e) = connection.await {
@@ -44,7 +49,7 @@ impl PgPool {
                 &[],
             )
             .await
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
 
         Ok(rows.iter().map(|r| Supplement {
             id: r.get("id"),
@@ -73,7 +78,7 @@ impl PgPool {
                   &supp.cycle_id, &supp.timing, &supp.training_day_only, &supp.notes],
             )
             .await
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
         Ok(())
     }
 
@@ -82,7 +87,7 @@ impl PgPool {
         client
             .execute("DELETE FROM supplements WHERE id = $1", &[&id])
             .await
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
         Ok(())
     }
 
@@ -93,7 +98,7 @@ impl PgPool {
         let rows = client
             .query("SELECT id, name, weeks_on, weeks_off, start_date FROM cycles ORDER BY name", &[])
             .await
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
 
         Ok(rows.iter().map(|r| {
             let start: chrono::NaiveDate = r.get("start_date");
@@ -110,7 +115,7 @@ impl PgPool {
     pub async fn put_cycle(&self, cycle: &Cycle) -> Result<(), Error> {
         let client = self.connect().await?;
         let start = chrono::NaiveDate::parse_from_str(&cycle.start_date, "%Y-%m-%d")
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
         client
             .execute(
                 "INSERT INTO cycles (id, name, weeks_on, weeks_off, start_date)
@@ -121,7 +126,7 @@ impl PgPool {
                 &[&cycle.id, &cycle.name, &(cycle.weeks_on as i32), &(cycle.weeks_off as i32), &start],
             )
             .await
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
         Ok(())
     }
 
@@ -130,7 +135,7 @@ impl PgPool {
         client
             .execute("DELETE FROM cycles WHERE id = $1", &[&id])
             .await
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
         Ok(())
     }
 
@@ -141,7 +146,7 @@ impl PgPool {
         let row = client
             .query_opt("SELECT value FROM config WHERE key = $1", &[&key])
             .await
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
 
         match row {
             Some(r) => {
@@ -154,7 +159,7 @@ impl PgPool {
 
     pub async fn put_config<T: serde::Serialize>(&self, key: &str, value: &T) -> Result<(), Error> {
         let client = self.connect().await?;
-        let json = serde_json::to_value(value).map_err(|e| Error::Db(e.to_string()))?;
+        let json = serde_json::to_value(value).map_err(|e| Error::Db(format!("{e:?}")))?;
         client
             .execute(
                 "INSERT INTO config (key, value) VALUES ($1, $2)
@@ -162,7 +167,7 @@ impl PgPool {
                 &[&key, &json],
             )
             .await
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
         Ok(())
     }
 
@@ -171,7 +176,7 @@ impl PgPool {
     pub async fn put_log(&self, date: &str, entry_type: &str, id: &str, value: &serde_json::Value) -> Result<(), Error> {
         let client = self.connect().await?;
         let d = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
         client
             .execute(
                 "INSERT INTO logs (date, entry_type, entry_id, value)
@@ -180,21 +185,21 @@ impl PgPool {
                 &[&d, &entry_type, &id, value],
             )
             .await
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
         Ok(())
     }
 
     pub async fn get_logs_for_date(&self, date: &str) -> Result<Vec<LogEntry>, Error> {
         let client = self.connect().await?;
         let d = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
         let rows = client
             .query(
                 "SELECT entry_type, entry_id, value, created_at FROM logs WHERE date = $1",
                 &[&d],
             )
             .await
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
 
         Ok(rows.iter().map(|r| {
             let ts: chrono::DateTime<chrono::Utc> = r.get("created_at");
@@ -210,9 +215,9 @@ impl PgPool {
     pub async fn get_logs_for_range(&self, start: &str, end: &str) -> Result<Vec<LogEntry>, Error> {
         let client = self.connect().await?;
         let s = chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
         let e = chrono::NaiveDate::parse_from_str(end, "%Y-%m-%d")
-            .map_err(|e| Error::Db(e.to_string()))?;
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
         let rows = client
             .query(
                 "SELECT date, entry_type, entry_id, value, created_at FROM logs

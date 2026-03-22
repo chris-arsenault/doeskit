@@ -11,6 +11,11 @@ use crate::AppState;
 
 type AppResult<T> = Result<Json<T>, StatusCode>;
 
+fn db_err(e: crate::db::Error) -> StatusCode {
+    tracing::error!("DB error: {e}");
+    StatusCode::INTERNAL_SERVER_ERROR
+}
+
 pub fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/today", get(get_today))
@@ -35,14 +40,14 @@ async fn health() -> Json<serde_json::Value> {
 
 async fn get_today(State(state): State<Arc<AppState>>) -> AppResult<TodayResponse> {
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let supplements = state.db.list_supplements().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let cycles = state.db.list_cycles().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let logs = state.db.get_logs_for_date(&today).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let supplements = state.db.list_supplements().await.map_err(db_err)?;
+    let cycles = state.db.list_cycles().await.map_err(db_err)?;
+    let logs = state.db.get_logs_for_date(&today).await.map_err(db_err)?;
     let schedule: TrainingSchedule = state
         .db
         .get_config("training_schedule")
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(db_err)?
         .unwrap_or(TrainingSchedule { days: vec![] });
 
     let is_training_day = check_training_day(&schedule, &today);
@@ -105,7 +110,7 @@ async fn post_log(State(state): State<Arc<AppState>>, Json(req): Json<LogRequest
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     match state.db.put_log(&today, &req.r#type, &req.id, &req.value).await {
         Ok(_) => StatusCode::OK,
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        Err(e) => { tracing::error!("DB error: {e}"); StatusCode::INTERNAL_SERVER_ERROR }
     }
 }
 
@@ -139,14 +144,14 @@ async fn create_supplement(
         .db
         .put_supplement(&supp)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(db_err)?;
     Ok(Json(supp))
 }
 
 async fn delete_supplement(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> StatusCode {
     match state.db.delete_supplement(&id).await {
         Ok(_) => StatusCode::OK,
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        Err(e) => { tracing::error!("DB error: {e}"); StatusCode::INTERNAL_SERVER_ERROR }
     }
 }
 
@@ -176,14 +181,14 @@ async fn create_cycle(
         .db
         .put_cycle(&cycle)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(db_err)?;
     Ok(Json(cycle))
 }
 
 async fn delete_cycle(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> StatusCode {
     match state.db.delete_cycle(&id).await {
         Ok(_) => StatusCode::OK,
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        Err(e) => { tracing::error!("DB error: {e}"); StatusCode::INTERNAL_SERVER_ERROR }
     }
 }
 
@@ -194,7 +199,7 @@ async fn get_schedule(State(state): State<Arc<AppState>>) -> AppResult<TrainingS
         .db
         .get_config::<TrainingSchedule>("training_schedule")
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(db_err)?
         .unwrap_or(TrainingSchedule { days: vec![] });
     Ok(Json(schedule))
 }
@@ -205,7 +210,7 @@ async fn set_schedule(
 ) -> StatusCode {
     match state.db.put_config("training_schedule", &schedule).await {
         Ok(_) => StatusCode::OK,
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        Err(e) => { tracing::error!("DB error: {e}"); StatusCode::INTERNAL_SERVER_ERROR }
     }
 }
 
@@ -221,8 +226,8 @@ async fn get_history(
         .format("%Y-%m-%d")
         .to_string();
 
-    let supplements = state.db.list_supplements().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let logs = state.db.get_logs_for_range(&start, &end).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let supplements = state.db.list_supplements().await.map_err(db_err)?;
+    let logs = state.db.get_logs_for_range(&start, &end).await.map_err(db_err)?;
 
     let mut summaries: std::collections::BTreeMap<String, DaySummary> = std::collections::BTreeMap::new();
 

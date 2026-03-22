@@ -36,16 +36,16 @@ data "aws_ssm_parameter" "rds_port" {
   name = "/platform/rds/port"
 }
 
-data "aws_ssm_parameter" "rds_master_username" {
-  name = "/platform/rds/master-username"
+data "aws_ssm_parameter" "db_username" {
+  name = "/platform/db/dosekit/username"
 }
 
-data "aws_ssm_parameter" "rds_master_password" {
-  name = "/platform/rds/master-password"
+data "aws_ssm_parameter" "db_password" {
+  name = "/platform/db/dosekit/password"
 }
 
-data "aws_ssm_parameter" "rds_security_group_id" {
-  name = "/platform/rds/security-group-id"
+data "aws_ssm_parameter" "db_database" {
+  name = "/platform/db/dosekit/database"
 }
 
 # ── Cognito client (self-service per INTEGRATION.md Step 6) ──
@@ -124,7 +124,7 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      DATABASE_URL = "postgresql://${nonsensitive(data.aws_ssm_parameter.rds_master_username.value)}:${data.aws_ssm_parameter.rds_master_password.value}@${nonsensitive(data.aws_ssm_parameter.rds_address.value)}:${nonsensitive(data.aws_ssm_parameter.rds_port.value)}/dosekit?sslmode=require"
+      DATABASE_URL = "postgresql://${nonsensitive(data.aws_ssm_parameter.db_username.value)}:${data.aws_ssm_parameter.db_password.value}@${nonsensitive(data.aws_ssm_parameter.rds_address.value)}:${nonsensitive(data.aws_ssm_parameter.rds_port.value)}/${nonsensitive(data.aws_ssm_parameter.db_database.value)}?sslmode=require"
       RUST_LOG     = "info"
     }
   }

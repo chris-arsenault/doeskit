@@ -13,6 +13,10 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<(), lambda_http::Error> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .json()
@@ -20,6 +24,11 @@ async fn main() -> Result<(), lambda_http::Error> {
 
     let database_url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set");
+
+    // Log connection target (redact password)
+    if let Some(at_pos) = database_url.find('@') {
+        tracing::info!("Connecting to: ...@{}", &database_url[at_pos + 1..]);
+    }
 
     let state = Arc::new(AppState {
         db: db::PgPool::new(database_url),
