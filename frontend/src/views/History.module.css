@@ -1,0 +1,50 @@
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: var(--spacing);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.day {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px var(--spacing);
+}
+
+.date {
+  font-weight: 500;
+  font-size: 14px;
+  min-width: 100px;
+}
+
+.stats {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.yes {
+  color: var(--color-success);
+}
+
+.no {
+  color: var(--color-danger);
+}
+
+.suppStat {
+  color: var(--color-primary);
+}

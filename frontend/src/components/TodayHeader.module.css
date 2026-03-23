@@ -1,0 +1,19 @@
+.date {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--color-success);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-left: 10px;
+  vertical-align: middle;
+}

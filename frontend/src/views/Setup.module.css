@@ -1,0 +1,130 @@
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: var(--spacing);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.item strong {
+  display: block;
+  font-weight: 500;
+}
+
+.dayPicker {
+  display: flex;
+  gap: 6px;
+}
+
+.dayBtn {
+  flex: 1;
+  padding: 8px 4px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.dayBtn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+
+.dayActive {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+/* ── Type/Brand ───────────────────────────────────────────── */
+
+.typeItem {
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 8px;
+}
+
+.typeItem:last-child {
+  border-bottom: none;
+}
+
+.typeHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px 0;
+  text-align: left;
+  color: var(--color-text);
+}
+
+.typeHeader strong {
+  display: block;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.typeHeader div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.brandList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 4px 12px;
+}
+
+.brandBtn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+  color: var(--color-text);
+}
+
+.brandBtn:hover {
+  border-color: var(--color-primary);
+}
+
+.brandActive {
+  border-color: var(--color-success);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.brandName {
+  font-weight: 500;
+  font-size: 14px;
+}

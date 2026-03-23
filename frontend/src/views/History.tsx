@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "../data/api";
 import { Check, X, Moon, Zap, Dumbbell } from "lucide-react";
+import shared from "../styles/shared.module.css";
+import styles from "./History.module.css";
 
 type DaySummary = {
   date: string;
@@ -21,26 +23,38 @@ export default function History() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="loading-state"><div className="spinner" /></div>;
+  if (loading) {
+    return (
+      <div className={shared.loadingState}>
+        <div className={shared.spinner} />
+      </div>
+    );
+  }
 
   return (
-    <div className="view history-view">
-      <h1>History</h1>
+    <div>
+      <h1 className={styles.title}>History</h1>
       {days.length === 0 ? (
-        <p className="empty-text">No logged days yet.</p>
+        <p className={shared.emptyText}>No logged days yet.</p>
       ) : (
-        <ul className="history-list">
+        <ul className={styles.list}>
           {days.map((day) => (
-            <li key={day.date} className="history-day card">
-              <div className="history-date">{formatShortDate(day.date)}</div>
-              <div className="history-stats">
+            <li key={day.date} className={`${shared.card} ${styles.day}`}>
+              <div className={styles.date}>{formatShortDate(day.date)}</div>
+              <div className={styles.stats}>
                 <Stat icon={<Moon size={14} />} value={day.sleep} />
                 <Stat icon={<Zap size={14} />} value={day.energy_avg != null ? Math.round(day.energy_avg) : null} />
-                <span className="stat">
+                <span className={styles.stat}>
                   <Dumbbell size={14} />
-                  {day.workout === true ? <Check size={14} className="yes" /> : day.workout === false ? <X size={14} className="no" /> : <span className="muted">-</span>}
+                  {day.workout === true ? (
+                    <Check size={14} className={styles.yes} />
+                  ) : day.workout === false ? (
+                    <X size={14} className={styles.no} />
+                  ) : (
+                    <span className={shared.muted}>-</span>
+                  )}
                 </span>
-                <span className="stat supplement-stat">
+                <span className={`${styles.stat} ${styles.suppStat}`}>
                   {day.supplements_taken}/{day.supplements_total}
                 </span>
               </div>
@@ -54,9 +68,9 @@ export default function History() {
 
 function Stat({ icon, value }: { icon: React.ReactNode; value: number | null }) {
   return (
-    <span className="stat">
+    <span className={styles.stat}>
       {icon}
-      {value != null ? value : <span className="muted">-</span>}
+      {value != null ? value : <span className={shared.muted}>-</span>}
     </span>
   );
 }

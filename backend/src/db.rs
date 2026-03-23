@@ -39,53 +39,80 @@ impl PgPool {
         Ok(client)
     }
 
-    // ── Supplements ─────────────────────────────────────────
+    // ── Supplement Types ────────────────────────────────────
 
-    pub async fn list_supplements(&self) -> Result<Vec<Supplement>, Error> {
+    pub async fn list_types(&self) -> Result<Vec<SupplementType>, Error> {
         let client = self.connect().await?;
         let rows = client
             .query(
-                "SELECT id, name, dose, unit, active, cycle_id, timing, training_day_only, notes FROM supplements ORDER BY timing, name",
+                "SELECT id, name, timing, training_day_only, cycle_id, target_dose::float8, target_unit, instructions, sort_order
+                 FROM supplement_types ORDER BY sort_order, name",
                 &[],
             )
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;
 
-        Ok(rows.iter().map(|r| Supplement {
+        Ok(rows.iter().map(|r| SupplementType {
             id: r.get("id"),
             name: r.get("name"),
-            dose: r.get("dose"),
-            unit: r.get("unit"),
-            active: r.get("active"),
-            cycle_id: r.get("cycle_id"),
             timing: r.get("timing"),
             training_day_only: r.get("training_day_only"),
-            notes: r.get("notes"),
+            cycle_id: r.get("cycle_id"),
+            target_dose: r.get("target_dose"),
+            target_unit: r.get("target_unit"),
+            instructions: r.get("instructions"),
+            sort_order: r.get("sort_order"),
         }).collect())
     }
 
-    pub async fn put_supplement(&self, supp: &Supplement) -> Result<(), Error> {
+    // ── Supplement Brands ───────────────────────────────────
+
+    pub async fn list_brands(&self) -> Result<Vec<SupplementBrand>, Error> {
         let client = self.connect().await?;
-        client
-            .execute(
-                "INSERT INTO supplements (id, name, dose, unit, active, cycle_id, timing, training_day_only, notes)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                 ON CONFLICT (id) DO UPDATE SET
-                   name = EXCLUDED.name, dose = EXCLUDED.dose, unit = EXCLUDED.unit,
-                   active = EXCLUDED.active, cycle_id = EXCLUDED.cycle_id, timing = EXCLUDED.timing,
-                   training_day_only = EXCLUDED.training_day_only, notes = EXCLUDED.notes",
-                &[&supp.id, &supp.name, &supp.dose, &supp.unit, &supp.active,
-                  &supp.cycle_id, &supp.timing, &supp.training_day_only, &supp.notes],
+        let rows = client
+            .query(
+                "SELECT id, type_id, brand, product_name, serving_dose::float8, serving_unit, serving_size, form, instructions
+                 FROM supplement_brands ORDER BY type_id, brand",
+                &[],
             )
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;
-        Ok(())
+
+        Ok(rows.iter().map(|r| SupplementBrand {
+            id: r.get("id"),
+            type_id: r.get("type_id"),
+            brand: r.get("brand"),
+            product_name: r.get("product_name"),
+            serving_dose: r.get("serving_dose"),
+            serving_unit: r.get("serving_unit"),
+            serving_size: r.get("serving_size"),
+            form: r.get("form"),
+            instructions: r.get("instructions"),
+        }).collect())
     }
 
-    pub async fn delete_supplement(&self, id: &str) -> Result<(), Error> {
+    pub async fn get_active_selections(&self) -> Result<std::collections::HashMap<String, String>, Error> {
+        let client = self.connect().await?;
+        let rows = client
+            .query("SELECT type_id, brand_id FROM active_selections", &[])
+            .await
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
+
+        Ok(rows.iter().map(|r| {
+            let type_id: String = r.get("type_id");
+            let brand_id: String = r.get("brand_id");
+            (type_id, brand_id)
+        }).collect())
+    }
+
+    pub async fn set_active_brand(&self, type_id: &str, brand_id: &str) -> Result<(), Error> {
         let client = self.connect().await?;
         client
-            .execute("DELETE FROM supplements WHERE id = $1", &[&id])
+            .execute(
+                "INSERT INTO active_selections (type_id, brand_id) VALUES ($1, $2)
+                 ON CONFLICT (type_id) DO UPDATE SET brand_id = EXCLUDED.brand_id",
+                &[&type_id, &brand_id],
+            )
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;
         Ok(())
@@ -115,7 +142,7 @@ impl PgPool {
     pub async fn put_cycle(&self, cycle: &Cycle) -> Result<(), Error> {
         let client = self.connect().await?;
         let start = chrono::NaiveDate::parse_from_str(&cycle.start_date, "%Y-%m-%d")
-            .map_err(|e| Error::Db(format!("{e:?}")))?;
+            .map_err(|e| Error::Db(e.to_string()))?;
         client
             .execute(
                 "INSERT INTO cycles (id, name, weeks_on, weeks_off, start_date)
@@ -159,7 +186,7 @@ impl PgPool {
 
     pub async fn put_config<T: serde::Serialize>(&self, key: &str, value: &T) -> Result<(), Error> {
         let client = self.connect().await?;
-        let json = serde_json::to_value(value).map_err(|e| Error::Db(format!("{e:?}")))?;
+        let json = serde_json::to_value(value).map_err(|e| Error::Db(e.to_string()))?;
         client
             .execute(
                 "INSERT INTO config (key, value) VALUES ($1, $2)
@@ -176,7 +203,7 @@ impl PgPool {
     pub async fn put_log(&self, date: &str, entry_type: &str, id: &str, value: &serde_json::Value) -> Result<(), Error> {
         let client = self.connect().await?;
         let d = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
-            .map_err(|e| Error::Db(format!("{e:?}")))?;
+            .map_err(|e| Error::Db(e.to_string()))?;
         client
             .execute(
                 "INSERT INTO logs (date, entry_type, entry_id, value)
@@ -192,12 +219,9 @@ impl PgPool {
     pub async fn get_logs_for_date(&self, date: &str) -> Result<Vec<LogEntry>, Error> {
         let client = self.connect().await?;
         let d = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
-            .map_err(|e| Error::Db(format!("{e:?}")))?;
+            .map_err(|e| Error::Db(e.to_string()))?;
         let rows = client
-            .query(
-                "SELECT entry_type, entry_id, value, created_at FROM logs WHERE date = $1",
-                &[&d],
-            )
+            .query("SELECT entry_type, entry_id, value, created_at FROM logs WHERE date = $1", &[&d])
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;
 
@@ -215,9 +239,9 @@ impl PgPool {
     pub async fn get_logs_for_range(&self, start: &str, end: &str) -> Result<Vec<LogEntry>, Error> {
         let client = self.connect().await?;
         let s = chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
-            .map_err(|e| Error::Db(format!("{e:?}")))?;
+            .map_err(|e| Error::Db(e.to_string()))?;
         let e = chrono::NaiveDate::parse_from_str(end, "%Y-%m-%d")
-            .map_err(|e| Error::Db(format!("{e:?}")))?;
+            .map_err(|e2| Error::Db(e2.to_string()))?;
         let rows = client
             .query(
                 "SELECT date, entry_type, entry_id, value, created_at FROM logs
@@ -225,7 +249,7 @@ impl PgPool {
                 &[&s, &e],
             )
             .await
-            .map_err(|e2| Error::Db(e2.to_string()))?;
+            .map_err(|e2| Error::Db(format!("{e2:?}")))?;
 
         Ok(rows.iter().map(|r| {
             let d: chrono::NaiveDate = r.get("date");
@@ -238,6 +262,8 @@ impl PgPool {
         }).collect())
     }
 }
+
+// ── Helpers ─────────────────────────────────────────────────
 
 // ── Error ───────────────────────────────────────────────────
 

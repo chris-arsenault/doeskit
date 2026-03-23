@@ -1,38 +1,35 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useStore, type Supplement, type Cycle } from "../data/store";
+import { useStore, type SupplementType, type SupplementBrand, type Cycle } from "../data/store";
 import { apiPost, apiDelete } from "../data/api";
-import { Plus, Trash2 } from "lucide-react";
-
-const TIMING_OPTIONS = [
-  { value: "morning", label: "Morning" },
-  { value: "pre_workout", label: "Pre-Workout" },
-  { value: "intra_workout", label: "Intra-Workout" },
-  { value: "post_workout", label: "Post-Workout" },
-  { value: "evening", label: "Evening" },
-];
+import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import shared from "../styles/shared.module.css";
+import styles from "./Setup.module.css";
 
 const DAY_OPTIONS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
 export default function Setup() {
-  const supplements = useStore((s) => s.supplements);
+  const types = useStore((s) => s.allTypes);
+  const brands = useStore((s) => s.allBrands);
   const cycles = useStore((s) => s.cycles);
   const schedule = useStore((s) => s.schedule);
-  const loadSupplements = useStore((s) => s.loadSupplements);
+  const loadTypes = useStore((s) => s.loadTypes);
+  const loadBrands = useStore((s) => s.loadBrands);
   const loadCycles = useStore((s) => s.loadCycles);
   const loadSchedule = useStore((s) => s.loadSchedule);
 
   useEffect(() => {
-    loadSupplements();
+    loadTypes();
+    loadBrands();
     loadCycles();
     loadSchedule();
-  }, [loadSupplements, loadCycles, loadSchedule]);
+  }, [loadTypes, loadBrands, loadCycles, loadSchedule]);
 
   return (
-    <div className="view setup-view">
-      <h1>Setup</h1>
+    <div>
+      <h1 className={styles.title}>Setup</h1>
       <ScheduleSection schedule={schedule} onChanged={loadSchedule} />
       <CyclesSection cycles={cycles} onChanged={loadCycles} />
-      <SupplementsSection supplements={supplements} cycles={cycles} onChanged={loadSupplements} />
+      <TypesSection types={types} brands={brands} cycles={cycles} />
     </div>
   );
 }
@@ -47,13 +44,13 @@ function ScheduleSection({ schedule, onChanged }: { schedule: { days: string[] }
   };
 
   return (
-    <section className="card">
-      <h2 className="card-title">Training Schedule</h2>
-      <div className="day-picker">
+    <section className={shared.card}>
+      <h2 className={shared.cardTitle}>Training Schedule</h2>
+      <div className={styles.dayPicker}>
         {DAY_OPTIONS.map((day) => (
           <button
             key={day}
-            className={`day-btn ${schedule.days.includes(day) ? "active" : ""}`}
+            className={`${styles.dayBtn} ${schedule.days.includes(day) ? styles.dayActive : ""}`}
             onClick={() => toggleDay(day)}
           >
             {day.slice(0, 3)}
@@ -64,95 +61,71 @@ function ScheduleSection({ schedule, onChanged }: { schedule: { days: string[] }
   );
 }
 
-function SupplementsSection({
-  supplements,
+function TypesSection({
+  types,
+  brands,
   cycles,
-  onChanged,
 }: {
-  supplements: Supplement[];
+  types: SupplementType[];
+  brands: SupplementBrand[];
   cycles: Cycle[];
-  onChanged: () => void;
 }) {
-  const [adding, setAdding] = useState(false);
-
-  const handleAdd = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    await apiPost("/supplements", {
-      name: fd.get("name"),
-      dose: fd.get("dose"),
-      unit: fd.get("unit"),
-      cycle_id: fd.get("cycle_id") || null,
-      timing: fd.get("timing"),
-      training_day_only: fd.get("training_day_only") === "on",
-      notes: fd.get("notes") || null,
-    });
-    setAdding(false);
-    onChanged();
-  };
-
-  const handleDelete = async (id: string) => {
-    await apiDelete(`/supplements/${id}`);
-    onChanged();
-  };
+  const [expandedType, setExpandedType] = useState<string | null>(null);
+  const setActiveBrand = useStore((s) => s.setActiveBrand);
+  const doses = useStore((s) => s.doses);
 
   return (
-    <section className="card">
-      <div className="card-header">
-        <h2 className="card-title">Supplements</h2>
-        <button className="icon-btn" onClick={() => setAdding(!adding)}>
-          <Plus size={18} />
-        </button>
-      </div>
-      {adding && (
-        <form className="inline-form" onSubmit={handleAdd}>
-          <input name="name" placeholder="Name" required />
-          <input name="dose" placeholder="Dose" required />
-          <input name="unit" placeholder="Unit (mg, ml...)" required />
-          <select name="timing" defaultValue="morning">
-            {TIMING_OPTIONS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-          <select name="cycle_id">
-            <option value="">No cycle (daily)</option>
-            {cycles.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <label className="checkbox-label">
-            <input name="training_day_only" type="checkbox" />
-            Training days only
-          </label>
-          <input name="notes" placeholder="Notes (optional)" />
-          <button type="submit" className="btn btn-primary btn-sm">
-            Add
-          </button>
-        </form>
-      )}
-      {supplements.length === 0 ? (
-        <p className="empty-text">No supplements yet. Add your first one above.</p>
+    <section className={shared.card}>
+      <h2 className={shared.cardTitle}>Supplements</h2>
+      {types.length === 0 ? (
+        <p className={shared.emptyText}>No supplement types configured.</p>
       ) : (
-        <ul className="setup-list">
-          {supplements.map((s) => (
-            <li key={s.id} className="setup-item">
-              <div>
-                <strong>{s.name}</strong>
-                <span className="muted">
-                  {s.dose} {s.unit} &middot; {s.timing.replace("_", "-")}
-                  {s.training_day_only ? " (training only)" : ""}
-                  {s.cycle_id ? ` (${cycles.find((c) => c.id === s.cycle_id)?.name ?? "cycle"})` : ""}
-                </span>
-              </div>
-              <button className="icon-btn danger" onClick={() => handleDelete(s.id)}>
-                <Trash2 size={16} />
-              </button>
-            </li>
-          ))}
+        <ul className={styles.list}>
+          {types.map((t) => {
+            const typeBrands = brands.filter((b) => b.type_id === t.id);
+            const activeDose = doses.find((d) => d.supplement_type.id === t.id);
+            const activeBrand = activeDose?.brand ?? typeBrands[0];
+            const expanded = expandedType === t.id;
+            const cycle = cycles.find((c) => c.id === t.cycle_id);
+
+            return (
+              <li key={t.id} className={styles.typeItem}>
+                <button
+                  className={styles.typeHeader}
+                  onClick={() => setExpandedType(expanded ? null : t.id)}
+                >
+                  <div>
+                    <strong>{t.name}</strong>
+                    <span className={shared.muted}>
+                      {t.target_dose} {t.target_unit} &middot; {t.timing.replace("_", "-")}
+                      {t.training_day_only ? " (training)" : ""}
+                      {cycle ? ` (${cycle.name})` : ""}
+                    </span>
+                    {activeBrand && (
+                      <span className={shared.muted}>
+                        Active: {activeBrand.brand} {activeBrand.product_name}
+                      </span>
+                    )}
+                  </div>
+                  {typeBrands.length > 1 && (expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />)}
+                </button>
+                {expanded && typeBrands.length > 1 && (
+                  <div className={styles.brandList}>
+                    {typeBrands.map((b) => (
+                      <button
+                        key={b.id}
+                        className={`${styles.brandBtn} ${activeBrand && b.id === activeBrand.id ? styles.brandActive : ""}`}
+                        onClick={() => setActiveBrand(t.id, b.id)}
+                      >
+                        <span className={styles.brandName}>{b.brand} {b.product_name}</span>
+                        <span className={shared.muted}>{b.serving_size} = {b.serving_dose} {b.serving_unit}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
@@ -181,37 +154,35 @@ function CyclesSection({ cycles, onChanged }: { cycles: Cycle[]; onChanged: () =
   };
 
   return (
-    <section className="card">
-      <div className="card-header">
-        <h2 className="card-title">Cycles</h2>
-        <button className="icon-btn" onClick={() => setAdding(!adding)}>
+    <section className={shared.card}>
+      <div className={shared.cardHeader}>
+        <h2 className={shared.cardTitle}>Cycles</h2>
+        <button className={shared.iconBtn} onClick={() => setAdding(!adding)}>
           <Plus size={18} />
         </button>
       </div>
       {adding && (
-        <form className="inline-form" onSubmit={handleAdd}>
+        <form className={shared.inlineForm} onSubmit={handleAdd}>
           <input name="name" placeholder="Cycle name" required />
           <input name="weeks_on" type="number" placeholder="Weeks on" min="1" required />
           <input name="weeks_off" type="number" placeholder="Weeks off" min="1" required />
           <input name="start_date" type="date" required />
-          <button type="submit" className="btn btn-primary btn-sm">
-            Add
-          </button>
+          <button type="submit" className={`${shared.btnPrimary} ${shared.btnSm}`}>Add</button>
         </form>
       )}
       {cycles.length === 0 ? (
-        <p className="empty-text">No cycles yet. Create one for on/off supplement schedules.</p>
+        <p className={shared.emptyText}>No cycles configured.</p>
       ) : (
-        <ul className="setup-list">
+        <ul className={styles.list}>
           {cycles.map((c) => (
-            <li key={c.id} className="setup-item">
+            <li key={c.id} className={styles.item}>
               <div>
                 <strong>{c.name}</strong>
-                <span className="muted">
+                <span className={shared.muted}>
                   {c.weeks_on}w on / {c.weeks_off}w off &middot; started {c.start_date}
                 </span>
               </div>
-              <button className="icon-btn danger" onClick={() => handleDelete(c.id)}>
+              <button className={`${shared.iconBtn} ${shared.iconBtnDanger}`} onClick={() => handleDelete(c.id)}>
                 <Trash2 size={16} />
               </button>
             </li>

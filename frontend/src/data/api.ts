@@ -25,6 +25,14 @@ export async function apiGet<T = unknown>(path: string): Promise<T> {
   return res.json();
 }
 
+export async function apiPut(path: string): Promise<void> {
+  const token = await getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}${path}`, { method: "PUT", headers });
+  if (!res.ok) throw new Error(`${path} failed: ${res.status}`);
+}
+
 export async function apiDelete(path: string): Promise<void> {
   const token = await getToken();
   const headers: Record<string, string> = {};

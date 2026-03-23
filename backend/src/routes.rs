@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use std::sync::Arc;
@@ -20,9 +20,9 @@ pub fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/today", get(get_today))
         .route("/log", post(post_log))
-        .route("/supplements", get(list_supplements))
-        .route("/supplements", post(create_supplement))
-        .route("/supplements/{id}", delete(delete_supplement))
+        .route("/types", get(list_types))
+        .route("/brands", get(list_brands))
+        .route("/brands/{type_id}/active/{brand_id}", put(set_active_brand))
         .route("/cycles", get(list_cycles))
         .route("/cycles", post(create_cycle))
         .route("/cycles/{id}", delete(delete_cycle))
@@ -38,9 +38,16 @@ async fn health() -> Json<serde_json::Value> {
 
 // ── Today ───────────────────────────────────────────────────
 
-async fn get_today(State(state): State<Arc<AppState>>) -> AppResult<TodayResponse> {
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let supplements = state.db.list_supplements().await.map_err(db_err)?;
+#[derive(Debug, serde::Deserialize)]
+struct TodayQuery {
+    date: Option<String>,
+}
+
+async fn get_today(State(state): State<Arc<AppState>>, Query(query): Query<TodayQuery>) -> AppResult<TodayResponse> {
+    let today = query.date.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
+    let types = state.db.list_types().await.map_err(db_err)?;
+    let brands = state.db.list_brands().await.map_err(db_err)?;
+    let selections = state.db.get_active_selections().await.map_err(db_err)?;
     let cycles = state.db.list_cycles().await.map_err(db_err)?;
     let logs = state.db.get_logs_for_date(&today).await.map_err(db_err)?;
     let schedule: TrainingSchedule = state
@@ -51,20 +58,42 @@ async fn get_today(State(state): State<Arc<AppState>>) -> AppResult<TodayRespons
         .unwrap_or(TrainingSchedule { days: vec![] });
 
     let is_training_day = check_training_day(&schedule, &today);
-    let active_supplements = filter_active_supplements(&supplements, &cycles, &today);
 
-    let supplement_statuses: Vec<SupplementStatus> = active_supplements
-        .into_iter()
-        .map(|s| {
-            let taken = logs
-                .iter()
-                .any(|l| l.r#type == "supplement" && l.id == s.id && l.value == serde_json::json!(true));
-            SupplementStatus { supplement: s, taken }
+    // Build daily doses from active brands
+    let doses: Vec<DoseStatus> = types
+        .iter()
+        .filter(|t| {
+            // Filter by cycle
+            if let Some(ref cid) = t.cycle_id {
+                let cycle = cycles.iter().find(|c| c.id == *cid);
+                if let Some(c) = cycle {
+                    if !is_cycle_on(c, &today) {
+                        return false;
+                    }
+                }
+            }
+            true
+        })
+        .filter_map(|t| {
+            let brand_id = selections.get(&t.id)?;
+            let brand = brands.iter().find(|b| b.id == *brand_id)?;
+            let servings_needed = compute_servings(t.target_dose, brand.serving_dose, &brand.form);
+            let dose_label = format_dose_label(servings_needed, &brand.serving_size, &brand.form);
+            Some(DoseStatus {
+                dose: DailyDose {
+                    supplement_type: t.clone(),
+                    brand: brand.clone(),
+                    servings_needed,
+                    dose_label,
+                },
+                taken: logs.iter().any(|l| {
+                    l.r#type == "supplement" && l.id == t.id && l.value == serde_json::json!(true)
+                }),
+            })
         })
         .collect();
 
-    let sleep = logs
-        .iter()
+    let sleep = logs.iter()
         .find(|l| l.r#type == "sleep")
         .and_then(|l| l.value.as_i64())
         .map(|v| v as i32);
@@ -76,13 +105,11 @@ async fn get_today(State(state): State<Arc<AppState>>) -> AppResult<TodayRespons
             .map(|v| v as i32)
     };
 
-    let workout_done = logs
-        .iter()
+    let workout_done = logs.iter()
         .find(|l| l.r#type == "workout" && l.id == "done")
         .and_then(|l| l.value.as_bool());
 
-    let workout_motivation = logs
-        .iter()
+    let workout_motivation = logs.iter()
         .find(|l| l.r#type == "workout" && l.id == "motivation")
         .and_then(|l| l.value.as_i64())
         .map(|v| v as i32);
@@ -90,7 +117,7 @@ async fn get_today(State(state): State<Arc<AppState>>) -> AppResult<TodayRespons
     Ok(Json(TodayResponse {
         date: today,
         is_training_day,
-        supplements: supplement_statuses,
+        doses,
         sleep,
         energy: EnergyStatus {
             morning: energy_val("morning"),
@@ -106,50 +133,29 @@ async fn get_today(State(state): State<Arc<AppState>>) -> AppResult<TodayRespons
 
 // ── Logging ─────────────────────────────────────────────────
 
-async fn post_log(State(state): State<Arc<AppState>>, Json(req): Json<LogRequest>) -> StatusCode {
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+async fn post_log(State(state): State<Arc<AppState>>, Query(query): Query<TodayQuery>, Json(req): Json<LogRequest>) -> StatusCode {
+    let today = query.date.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
     match state.db.put_log(&today, &req.r#type, &req.id, &req.value).await {
         Ok(_) => StatusCode::OK,
         Err(e) => { tracing::error!("DB error: {e}"); StatusCode::INTERNAL_SERVER_ERROR }
     }
 }
 
-// ── Supplements ─────────────────────────────────────────────
+// ── Types & Brands ──────────────────────────────────────────
 
-async fn list_supplements(State(state): State<Arc<AppState>>) -> AppResult<Vec<Supplement>> {
-    state
-        .db
-        .list_supplements()
-        .await
-        .map(Json)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+async fn list_types(State(state): State<Arc<AppState>>) -> AppResult<Vec<SupplementType>> {
+    state.db.list_types().await.map(Json).map_err(db_err)
 }
 
-async fn create_supplement(
+async fn list_brands(State(state): State<Arc<AppState>>) -> AppResult<Vec<SupplementBrand>> {
+    state.db.list_brands().await.map(Json).map_err(db_err)
+}
+
+async fn set_active_brand(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<CreateSupplement>,
-) -> Result<Json<Supplement>, StatusCode> {
-    let supp = Supplement {
-        id: uuid::Uuid::new_v4().to_string(),
-        name: req.name,
-        dose: req.dose,
-        unit: req.unit,
-        active: true,
-        cycle_id: req.cycle_id,
-        timing: req.timing,
-        training_day_only: req.training_day_only,
-        notes: req.notes,
-    };
-    state
-        .db
-        .put_supplement(&supp)
-        .await
-        .map_err(db_err)?;
-    Ok(Json(supp))
-}
-
-async fn delete_supplement(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> StatusCode {
-    match state.db.delete_supplement(&id).await {
+    Path((type_id, brand_id)): Path<(String, String)>,
+) -> StatusCode {
+    match state.db.set_active_brand(&type_id, &brand_id).await {
         Ok(_) => StatusCode::OK,
         Err(e) => { tracing::error!("DB error: {e}"); StatusCode::INTERNAL_SERVER_ERROR }
     }
@@ -158,12 +164,7 @@ async fn delete_supplement(State(state): State<Arc<AppState>>, Path(id): Path<St
 // ── Cycles ──────────────────────────────────────────────────
 
 async fn list_cycles(State(state): State<Arc<AppState>>) -> AppResult<Vec<Cycle>> {
-    state
-        .db
-        .list_cycles()
-        .await
-        .map(Json)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+    state.db.list_cycles().await.map(Json).map_err(db_err)
 }
 
 async fn create_cycle(
@@ -177,11 +178,7 @@ async fn create_cycle(
         weeks_off: req.weeks_off,
         start_date: req.start_date,
     };
-    state
-        .db
-        .put_cycle(&cycle)
-        .await
-        .map_err(db_err)?;
+    state.db.put_cycle(&cycle).await.map_err(db_err)?;
     Ok(Json(cycle))
 }
 
@@ -226,23 +223,21 @@ async fn get_history(
         .format("%Y-%m-%d")
         .to_string();
 
-    let supplements = state.db.list_supplements().await.map_err(db_err)?;
+    let types = state.db.list_types().await.map_err(db_err)?;
     let logs = state.db.get_logs_for_range(&start, &end).await.map_err(db_err)?;
 
     let mut summaries: std::collections::BTreeMap<String, DaySummary> = std::collections::BTreeMap::new();
 
     for log in &logs {
         let date = log.timestamp.get(..10).unwrap_or("").to_string();
-        if date.is_empty() {
-            continue;
-        }
+        if date.is_empty() { continue; }
         let entry = summaries.entry(date.clone()).or_insert_with(|| DaySummary {
             date: date.clone(),
             sleep: None,
             energy_avg: None,
             workout: None,
             supplements_taken: 0,
-            supplements_total: supplements.len() as u32,
+            supplements_total: types.len() as u32,
         });
 
         match log.r#type.as_str() {
@@ -268,6 +263,40 @@ async fn get_history(
     Ok(Json(summaries.into_values().rev().collect()))
 }
 
+// ── Dose computation ────────────────────────────────────────
+
+fn compute_servings(target: f64, per_serving: f64, form: &str) -> f64 {
+    if per_serving <= 0.0 { return 1.0; }
+    let raw = target / per_serving;
+    match form {
+        "scoop" => (raw * 2.0).round() / 2.0,  // round to nearest 0.5
+        _ => raw.ceil(),                         // pill, drops, etc: ceil
+    }
+}
+
+fn format_dose_label(servings: f64, serving_size: &str, form: &str) -> String {
+    let count = if servings == servings.floor() {
+        format!("{}", servings as i64)
+    } else {
+        format!("{servings:.1}")
+    };
+
+    // Extract unit from serving_size (e.g., "1 capsule" -> "capsules", "1 scoop" -> "scoops")
+    let unit = serving_size
+        .split_whitespace()
+        .skip(1)
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let unit_plural = if servings > 1.0 && !unit.ends_with('s') && form != "drops" {
+        format!("{unit}s")
+    } else {
+        unit
+    };
+
+    format!("{count} {unit_plural}")
+}
+
 // ── Training schedule logic ─────────────────────────────────
 
 fn check_training_day(schedule: &TrainingSchedule, date_str: &str) -> bool {
@@ -281,28 +310,6 @@ fn check_training_day(schedule: &TrainingSchedule, date_str: &str) -> bool {
 
 // ── Cycle logic ─────────────────────────────────────────────
 
-fn filter_active_supplements(supplements: &[Supplement], cycles: &[Cycle], today: &str) -> Vec<Supplement> {
-    supplements
-        .iter()
-        .filter(|s| {
-            if !s.active {
-                return false;
-            }
-            match &s.cycle_id {
-                None => true,
-                Some(cid) => {
-                    let cycle = cycles.iter().find(|c| c.id == *cid);
-                    match cycle {
-                        None => true,
-                        Some(c) => is_cycle_on(c, today),
-                    }
-                }
-            }
-        })
-        .cloned()
-        .collect()
-}
-
 fn is_cycle_on(cycle: &Cycle, today: &str) -> bool {
     let start = match chrono::NaiveDate::parse_from_str(&cycle.start_date, "%Y-%m-%d") {
         Ok(d) => d,
@@ -312,9 +319,7 @@ fn is_cycle_on(cycle: &Cycle, today: &str) -> bool {
         Ok(d) => d,
         Err(_) => return true,
     };
-    if current < start {
-        return false;
-    }
+    if current < start { return false; }
     let total_days = (cycle.weeks_on + cycle.weeks_off) * 7;
     let day_in_cycle = (current - start).num_days() as u32 % total_days;
     day_in_cycle < cycle.weeks_on * 7

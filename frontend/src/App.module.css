@@ -1,0 +1,101 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 10px;
+  padding-bottom: 70px;
+}
+
+/* ── Bottom nav ───────────────────────────────────────────── */
+
+.nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-around;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  padding: 6px 0;
+  padding-bottom: max(6px, env(safe-area-inset-bottom));
+  max-width: 480px;
+  margin: 0 auto;
+  z-index: 10;
+}
+
+.navItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 4px 12px;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.navItem:global(.active),
+.navItem:hover {
+  color: var(--color-primary);
+}
+
+/* ── Splash / Login ───────────────────────────────────────── */
+
+.splash {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--spacing);
+}
+
+.splashCard {
+  width: 100%;
+  max-width: 320px;
+}
+
+.splashTitle {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  text-align: center;
+  margin-bottom: 24px;
+  color: var(--color-primary);
+}
+
+.loginForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.loginForm input {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.loginForm input:focus {
+  border-color: var(--color-primary);
+}
+
+.loginError {
+  color: var(--color-danger);
+  font-size: 13px;
+  text-align: center;
+}

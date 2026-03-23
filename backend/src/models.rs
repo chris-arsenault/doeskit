@@ -1,39 +1,43 @@
 use serde::{Deserialize, Serialize};
 
-// ── Supplement ──────────────────────────────────────────────
+// ── Supplement Type (parent) ────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Supplement {
+pub struct SupplementType {
     pub id: String,
     pub name: String,
-    pub dose: String,
-    pub unit: String,
-    pub active: bool,
-    pub cycle_id: Option<String>,
-    #[serde(default)]
     pub timing: String,
-    #[serde(default)]
     pub training_day_only: bool,
-    #[serde(default)]
-    pub notes: Option<String>,
+    pub cycle_id: Option<String>,
+    pub target_dose: f64,
+    pub target_unit: String,
+    pub instructions: Option<String>,
+    pub sort_order: i32,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct CreateSupplement {
-    pub name: String,
-    pub dose: String,
-    pub unit: String,
-    pub cycle_id: Option<String>,
-    #[serde(default = "default_timing")]
-    pub timing: String,
-    #[serde(default)]
-    pub training_day_only: bool,
-    #[serde(default)]
-    pub notes: Option<String>,
+// ── Supplement Brand (child) ────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SupplementBrand {
+    pub id: String,
+    pub type_id: String,
+    pub brand: String,
+    pub product_name: String,
+    pub serving_dose: f64,
+    pub serving_unit: String,
+    pub serving_size: String,
+    pub form: String,
+    pub instructions: Option<String>,
 }
 
-fn default_timing() -> String {
-    "morning".into()
+// ── Computed daily dose ─────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DailyDose {
+    pub supplement_type: SupplementType,
+    pub brand: SupplementBrand,
+    pub servings_needed: f64,
+    pub dose_label: String,
 }
 
 // ── Cycle ───────────────────────────────────────────────────
@@ -85,15 +89,15 @@ pub struct LogEntry {
 pub struct TodayResponse {
     pub date: String,
     pub is_training_day: bool,
-    pub supplements: Vec<SupplementStatus>,
+    pub doses: Vec<DoseStatus>,
     pub sleep: Option<i32>,
     pub energy: EnergyStatus,
     pub workout: WorkoutStatus,
 }
 
 #[derive(Debug, Serialize)]
-pub struct SupplementStatus {
-    pub supplement: Supplement,
+pub struct DoseStatus {
+    pub dose: DailyDose,
     pub taken: bool,
 }
 
@@ -126,4 +130,3 @@ pub struct DaySummary {
 pub struct HistoryQuery {
     pub days: Option<u32>,
 }
-

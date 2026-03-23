@@ -6,6 +6,8 @@ import Today from "./views/Today";
 import Setup from "./views/Setup";
 import History from "./views/History";
 import { Pill, Settings, CalendarDays, LogOut } from "lucide-react";
+import styles from "./App.module.css";
+import shared from "./styles/shared.module.css";
 
 type AuthState = {
   status: "loading" | "signedOut" | "signedIn";
@@ -65,22 +67,22 @@ export default function App() {
 
   if (auth.status === "loading") {
     return (
-      <div className="splash">
-        <div className="splash-title">dosekit</div>
+      <div className={styles.splash}>
+        <div className={styles.splashTitle}>dosekit</div>
       </div>
     );
   }
 
   if (auth.status === "signedOut") {
     return (
-      <div className="splash">
-        <div className="splash-card">
-          <div className="splash-title">dosekit</div>
-          <form className="login-form" onSubmit={handleSignIn}>
+      <div className={styles.splash}>
+        <div className={styles.splashCard}>
+          <div className={styles.splashTitle}>dosekit</div>
+          <form className={styles.loginForm} onSubmit={handleSignIn}>
             <input name="username" type="text" placeholder="Username" required autoComplete="username" />
             <input name="password" type="password" placeholder="Password" required autoComplete="current-password" />
-            {errorMessage && <div className="login-error">{errorMessage}</div>}
-            <button type="submit" className="btn btn-primary">Sign in</button>
+            {errorMessage && <div className={styles.loginError}>{errorMessage}</div>}
+            <button type="submit" className={shared.btnPrimary}>Sign in</button>
           </form>
         </div>
       </div>
@@ -91,7 +93,7 @@ export default function App() {
 }
 
 function AuthenticatedApp({ token, username, onSignOut }: { token: string; username: string; onSignOut: () => void }) {
-  const loading = useStore((s) => s.loading);
+  const loading = useStore((s) => s.initialLoading);
   const error = useStore((s) => s.error);
   const refresh = useStore((s) => s.refresh);
 
@@ -100,18 +102,16 @@ function AuthenticatedApp({ token, username, onSignOut }: { token: string; usern
   }, [token]);
 
   return (
-    <div className="app-layout">
-      <main className="main-content">
+    <div className={styles.layout}>
+      <main className={styles.main}>
         {loading ? (
-          <div className="loading-state">
-            <div className="spinner" />
+          <div className={shared.loadingState}>
+            <div className={shared.spinner} />
           </div>
         ) : error ? (
-          <div className="error-state">
+          <div className={shared.errorState}>
             <p>{error}</p>
-            <button className="btn btn-primary" onClick={refresh}>
-              Retry
-            </button>
+            <button className={shared.btnPrimary} onClick={refresh}>Retry</button>
           </div>
         ) : (
           <Routes>
@@ -121,20 +121,20 @@ function AuthenticatedApp({ token, username, onSignOut }: { token: string; usern
           </Routes>
         )}
       </main>
-      <nav className="bottom-nav">
-        <NavLink to="/" end className="nav-item">
+      <nav className={styles.nav}>
+        <NavLink to="/" end className={styles.navItem}>
           <Pill size={20} />
           <span>Today</span>
         </NavLink>
-        <NavLink to="/history" className="nav-item">
+        <NavLink to="/history" className={styles.navItem}>
           <CalendarDays size={20} />
           <span>History</span>
         </NavLink>
-        <NavLink to="/setup" className="nav-item">
+        <NavLink to="/setup" className={styles.navItem}>
           <Settings size={20} />
           <span>Setup</span>
         </NavLink>
-        <button className="nav-item" onClick={onSignOut} title={username}>
+        <button className={styles.navItem} onClick={onSignOut} title={username}>
           <LogOut size={20} />
           <span>Out</span>
         </button>
