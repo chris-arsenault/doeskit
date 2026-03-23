@@ -41,6 +41,10 @@ export default function App() {
       .catch(() => setAuth({ status: "signedOut", token: "", username: "" }));
   }, []);
 
+  const handleSignIn = useCallback((token: string, name: string) => {
+    setAuth({ status: "signedIn", token, username: name });
+  }, []);
+
   const handleSignOut = useCallback(() => {
     signOut();
     setAuth({ status: "signedOut", token: "", username: "" });
@@ -55,9 +59,7 @@ export default function App() {
   }
   if (auth.status === "signedOut") {
     return (
-      <LoginScreen
-        onSignIn={(token, name) => setAuth({ status: "signedIn", token, username: name })}
-      />
+      <LoginScreen onSignIn={handleSignIn} />
     );
   }
   return <AuthenticatedApp token={auth.token} username={auth.username} onSignOut={handleSignOut} />;

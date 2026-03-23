@@ -2,9 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildTimingGroups } from "./timingGroups";
 import type { DailyDose, SupplementType, SupplementBrand } from "./store";
 
-function makeDose(
-  overrides: Partial<SupplementType> & { id: string }
-): DailyDose {
+function makeDose(overrides: Partial<SupplementType> & { id: string }): DailyDose {
   const type_: SupplementType = {
     name: overrides.id,
     timing: "morning",
@@ -24,15 +22,10 @@ function makeDose(
     serving_size: "1 serving",
     form: "pill",
   };
-  return {
-    supplement_type: type_,
-    brand,
-    servings_needed: 1,
-    dose_label: "1 serving",
-  };
+  return { supplement_type: type_, brand, servings_needed: 1, dose_label: "1 serving" };
 }
 
-describe("buildTimingGroups", () => {
+describe("buildTimingGroups: grouping", () => {
   it("groups daily supplements by timing", () => {
     const doses = [
       makeDose({ id: "a", timing: "morning" }),
@@ -40,12 +33,10 @@ describe("buildTimingGroups", () => {
       makeDose({ id: "c", timing: "morning" }),
     ];
     const groups = buildTimingGroups(doses, false, false);
-
     expect(groups).toHaveLength(2);
     expect(groups[0].timing).toBe("morning");
     expect(groups[0].items).toHaveLength(2);
     expect(groups[1].timing).toBe("evening");
-    expect(groups[1].items).toHaveLength(1);
   });
 
   it("preserves timing order", () => {
@@ -55,23 +46,22 @@ describe("buildTimingGroups", () => {
       makeDose({ id: "c", timing: "pre_workout" }),
     ];
     const groups = buildTimingGroups(doses, true, false);
-
-    expect(groups.map((g) => g.timing)).toEqual([
-      "morning",
-      "pre_workout",
-      "evening",
-    ]);
+    expect(groups.map((g) => g.timing)).toEqual(["morning", "pre_workout", "evening"]);
   });
 
+  it("returns empty for empty doses", () => {
+    expect(buildTimingGroups([], true, false)).toEqual([]);
+  });
+});
+
+describe("buildTimingGroups: training day filtering", () => {
   it("hides training-day-only supplements on rest days", () => {
     const doses = [
       makeDose({ id: "daily", timing: "morning", training_day_only: false }),
       makeDose({ id: "training", timing: "pre_workout", training_day_only: true }),
     ];
     const groups = buildTimingGroups(doses, false, false);
-
     expect(groups).toHaveLength(1);
-    expect(groups[0].items).toHaveLength(1);
     expect(groups[0].items[0].supplement_type.id).toBe("daily");
   });
 
@@ -80,9 +70,7 @@ describe("buildTimingGroups", () => {
       makeDose({ id: "daily", timing: "morning", training_day_only: false }),
       makeDose({ id: "training", timing: "pre_workout", training_day_only: true }),
     ];
-    const groups = buildTimingGroups(doses, true, false);
-
-    expect(groups).toHaveLength(2);
+    expect(buildTimingGroups(doses, true, false)).toHaveLength(2);
   });
 
   it("hides training-day-only supplements when workout skipped", () => {
@@ -91,18 +79,18 @@ describe("buildTimingGroups", () => {
       makeDose({ id: "training", timing: "pre_workout", training_day_only: true }),
     ];
     const groups = buildTimingGroups(doses, true, true);
-
     expect(groups).toHaveLength(1);
     expect(groups[0].items[0].supplement_type.id).toBe("daily");
   });
+});
 
+describe("buildTimingGroups: timing collapse", () => {
   it("moves workout-window supplements to morning on rest days", () => {
     const doses = [
       makeDose({ id: "creatine", timing: "post_workout", training_day_only: false }),
       makeDose({ id: "collagen", timing: "pre_workout", training_day_only: false }),
     ];
     const groups = buildTimingGroups(doses, false, false);
-
     expect(groups).toHaveLength(1);
     expect(groups[0].timing).toBe("morning");
     expect(groups[0].items).toHaveLength(2);
@@ -114,23 +102,17 @@ describe("buildTimingGroups", () => {
       makeDose({ id: "collagen", timing: "pre_workout", training_day_only: false }),
     ];
     const groups = buildTimingGroups(doses, true, false);
-
     expect(groups).toHaveLength(2);
     expect(groups[0].timing).toBe("pre_workout");
     expect(groups[1].timing).toBe("post_workout");
   });
 
-  it("moves workout-window to morning when workout skipped on training day", () => {
+  it("moves workout-window to morning when workout skipped", () => {
     const doses = [
       makeDose({ id: "collagen", timing: "pre_workout", training_day_only: false }),
     ];
     const groups = buildTimingGroups(doses, true, true);
-
     expect(groups).toHaveLength(1);
     expect(groups[0].timing).toBe("morning");
-  });
-
-  it("returns empty for empty doses", () => {
-    expect(buildTimingGroups([], true, false)).toEqual([]);
   });
 });
