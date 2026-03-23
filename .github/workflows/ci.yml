@@ -17,6 +17,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CARGO_HOME: /home/runner/.cargo
 
 jobs:
   lint:
@@ -31,6 +32,23 @@ jobs:
 
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@10.29.3 --activate
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store/v10
+          key: pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: pnpm-
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            backend/target
+          key: rust-lint-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: rust-lint-
 
       - name: Install frontend deps
         working-directory: frontend
@@ -69,18 +87,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v4
-      - name: Install cargo-lambda
-        run: pip3 install cargo-lambda
+
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@10.29.3 --activate
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store/v10
+          key: pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: pnpm-
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            backend/target
+          key: rust-deploy-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: rust-deploy-
+
+      - name: Cache cargo-lambda
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/lib/python*/dist-packages/cargo_lambda*
+          key: cargo-lambda-${{ runner.os }}
+
+      - name: Install cargo-lambda
+        run: pip3 install cargo-lambda
+
       - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ secrets.OIDC_ROLE }}
           role-session-name: GitHubActions-${{ github.run_id }}
           aws-region: us-east-1
+
       - name: Deploy
         env:
           STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
