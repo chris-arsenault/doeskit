@@ -127,6 +127,10 @@ jobs:
           role-session-name: GitHubActions-${{ github.run_id }}
           aws-region: us-east-1
 
+      - uses: chris-arsenault/platform/.github/actions/run-migrations@main
+        with:
+          project: dosekit
+
       - name: Deploy
         env:
           STATE_BUCKET: ${{ secrets.STATE_BUCKET }}

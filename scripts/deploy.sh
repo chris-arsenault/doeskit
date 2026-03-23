@@ -54,41 +54,10 @@ echo "    Frontend build OK"
 echo ""
 echo "==> Running database migrations"
 cd "${ROOT_DIR}"
-
-REGION="us-east-1"
-PROJECT=$(grep "^project:" platform.yml | sed 's/^project:[[:space:]]*//')
-MIGRATIONS_DIR=$(grep "^migrations:" platform.yml | sed 's/^migrations:[[:space:]]*//')
-
-if [ -d "$MIGRATIONS_DIR" ]; then
-  BUCKET=$(aws ssm get-parameter --name /platform/db/migrations-bucket \
-    --query Parameter.Value --output text --region "${REGION}")
-  FN=$(aws ssm get-parameter --name /platform/db/migrate-function \
-    --query Parameter.Value --output text --region "${REGION}")
-
-  echo "    Uploading migrations for ${PROJECT}..."
-  aws s3 sync "${MIGRATIONS_DIR}/" "s3://${BUCKET}/migrations/${PROJECT}/" --delete --quiet
-
-  echo "    Running migrations..."
-  RESULT_FILE=$(mktemp)
-  aws lambda invoke \
-    --function-name "${FN}" \
-    --payload "{\"operation\":\"migrate\",\"project\":\"${PROJECT}\"}" \
-    --cli-binary-format raw-in-base64-out \
-    --region "${REGION}" \
-    "${RESULT_FILE}" > /dev/null
-
-  RESULT=$(cat "${RESULT_FILE}")
-  rm "${RESULT_FILE}"
-
-  if echo "${RESULT}" | grep -q '"errorMessage"'; then
-    echo "    Migration FAILED:"
-    echo "${RESULT}" | python3 -m json.tool 2>/dev/null || echo "${RESULT}"
-    exit 1
-  fi
-
-  echo "${RESULT}" | python3 -m json.tool 2>/dev/null || echo "${RESULT}"
+if command -v db-migrate &> /dev/null; then
+  db-migrate
 else
-  echo "    No migrations directory, skipping."
+  echo "    db-migrate not on PATH (CI uses run-migrations action instead), skipping."
 fi
 
 # ── Deploy with Terraform ────────────────────────────────────────────
