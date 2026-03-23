@@ -24,12 +24,8 @@ if [ -d "dist" ]; then
   rm -rf dist
 fi
 
-if [ -f "package-lock.json" ]; then
-  npm ci
-else
-  npm install
-fi
-npm run build
+pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+pnpm run build
 
 # Sanity check: dist exists
 if [ ! -d "dist" ]; then

@@ -15,50 +15,31 @@ type AuthState = {
   username: string;
 };
 
+function displayName(payload: Record<string, unknown>): string {
+  return (
+    (typeof payload.name === "string" && payload.name) ||
+    (typeof payload.email === "string" && payload.email) ||
+    (typeof payload["cognito:username"] === "string" && payload["cognito:username"]) ||
+    ""
+  );
+}
+
 export default function App() {
   const [auth, setAuth] = useState<AuthState>({ status: "loading", token: "", username: "" });
-  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    const loadSession = async () => {
-      try {
-        const session = await getSession();
-        if (session) {
-          const payload = session.getIdToken().payload as Record<string, unknown>;
-          const displayName =
-            (typeof payload.name === "string" && payload.name) ||
-            (typeof payload.email === "string" && payload.email) ||
-            (typeof payload["cognito:username"] === "string" && payload["cognito:username"]) ||
-            "";
-          setAuth({ status: "signedIn", token: session.getIdToken().getJwtToken(), username: displayName });
-          return;
-        }
-      } catch (error) {
-        console.error("Session load failed:", error);
-      }
-      setAuth({ status: "signedOut", token: "", username: "" });
-    };
-    loadSession();
+    getSession()
+      .then((session) => {
+        if (!session) return setAuth({ status: "signedOut", token: "", username: "" });
+        const payload = session.getIdToken().payload as Record<string, unknown>;
+        setAuth({
+          status: "signedIn",
+          token: session.getIdToken().getJwtToken(),
+          username: displayName(payload),
+        });
+      })
+      .catch(() => setAuth({ status: "signedOut", token: "", username: "" }));
   }, []);
-
-  const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const username = String(formData.get("username") ?? "");
-    const password = String(formData.get("password") ?? "");
-    setErrorMessage("");
-    try {
-      const session = await signIn(username, password);
-      const payload = session.getIdToken().payload as Record<string, unknown>;
-      const displayName =
-        (typeof payload.name === "string" && payload.name) ||
-        (typeof payload.email === "string" && payload.email) ||
-        "";
-      setAuth({ status: "signedIn", token: session.getIdToken().getJwtToken(), username: displayName || username });
-    } catch (error) {
-      setErrorMessage((error as Error).message || "Sign in failed");
-    }
-  };
 
   const handleSignOut = useCallback(() => {
     signOut();
@@ -72,27 +53,110 @@ export default function App() {
       </div>
     );
   }
-
   if (auth.status === "signedOut") {
     return (
-      <div className={styles.splash}>
-        <div className={styles.splashCard}>
-          <div className={styles.splashTitle}>dosekit</div>
-          <form className={styles.loginForm} onSubmit={handleSignIn}>
-            <input name="username" type="text" placeholder="Username" required autoComplete="username" />
-            <input name="password" type="password" placeholder="Password" required autoComplete="current-password" />
-            {errorMessage && <div className={styles.loginError}>{errorMessage}</div>}
-            <button type="submit" className={shared.btnPrimary}>Sign in</button>
-          </form>
-        </div>
-      </div>
+      <LoginScreen
+        onSignIn={(token, name) => setAuth({ status: "signedIn", token, username: name })}
+      />
     );
   }
-
   return <AuthenticatedApp token={auth.token} username={auth.username} onSignOut={handleSignOut} />;
 }
 
-function AuthenticatedApp({ token, username, onSignOut }: { token: string; username: string; onSignOut: () => void }) {
+function LoginScreen({ onSignIn }: { onSignIn: (token: string, username: string) => void }) {
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const fd = new FormData(event.currentTarget);
+    setErrorMessage("");
+    try {
+      const session = await signIn(
+        String(fd.get("username") ?? ""),
+        String(fd.get("password") ?? "")
+      );
+      const payload = session.getIdToken().payload as Record<string, unknown>;
+      onSignIn(
+        session.getIdToken().getJwtToken(),
+        displayName(payload) || String(fd.get("username"))
+      );
+    } catch (error) {
+      setErrorMessage((error as Error).message || "Sign in failed");
+    }
+  };
+
+  return (
+    <div className={styles.splash}>
+      <div className={styles.splashCard}>
+        <div className={styles.splashTitle}>dosekit</div>
+        <form className={styles.loginForm} onSubmit={handleSubmit}>
+          <input
+            name="username"
+            type="text"
+            placeholder="Username"
+            required
+            autoComplete="username"
+          />
+          <input
+            name="password"
+            type="password"
+            placeholder="Password"
+            required
+            autoComplete="current-password"
+          />
+          {errorMessage && <div className={styles.loginError}>{errorMessage}</div>}
+          <button type="submit" className={shared.btnPrimary}>
+            Sign in
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function AppContent({
+  loading,
+  error,
+  refresh,
+}: {
+  loading: boolean;
+  error: string | null;
+  refresh: () => void;
+}) {
+  if (loading)
+    return (
+      <div className={shared.loadingState}>
+        <div className={shared.spinner} />
+      </div>
+    );
+  if (error) {
+    return (
+      <div className={shared.errorState}>
+        <p>{error}</p>
+        <button className={shared.btnPrimary} onClick={refresh}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+  return (
+    <Routes>
+      <Route path="/" element={<Today />} />
+      <Route path="/setup" element={<Setup />} />
+      <Route path="/history" element={<History />} />
+    </Routes>
+  );
+}
+
+function AuthenticatedApp({
+  token,
+  username,
+  onSignOut,
+}: {
+  token: string;
+  username: string;
+  onSignOut: () => void;
+}) {
   const loading = useStore((s) => s.initialLoading);
   const error = useStore((s) => s.error);
   const refresh = useStore((s) => s.refresh);
@@ -104,22 +168,7 @@ function AuthenticatedApp({ token, username, onSignOut }: { token: string; usern
   return (
     <div className={styles.layout}>
       <main className={styles.main}>
-        {loading ? (
-          <div className={shared.loadingState}>
-            <div className={shared.spinner} />
-          </div>
-        ) : error ? (
-          <div className={shared.errorState}>
-            <p>{error}</p>
-            <button className={shared.btnPrimary} onClick={refresh}>Retry</button>
-          </div>
-        ) : (
-          <Routes>
-            <Route path="/" element={<Today />} />
-            <Route path="/setup" element={<Setup />} />
-            <Route path="/history" element={<History />} />
-          </Routes>
-        )}
+        <AppContent loading={loading} error={error} refresh={refresh} />
       </main>
       <nav className={styles.nav}>
         <NavLink to="/" end className={styles.navItem}>

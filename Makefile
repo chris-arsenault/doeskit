@@ -1,45 +1,45 @@
-.PHONY: dev-frontend dev-backend build lint lint-fix format format-check \
-       lint-frontend lint-fix-frontend format-frontend format-check-frontend \
-       lint-backend format-backend build-frontend build-backend
-
-# ── Build ────────────────────────────────────────────────────
-
-build: build-frontend build-backend
-
-build-frontend:
-	cd frontend && npm run build
-
-build-backend:
-	cd backend && cargo lambda build --release --arm64 --output-format zip
+.PHONY: lint lint-fix format format-check typecheck test build deploy
 
 # ── Lint ─────────────────────────────────────────────────────
 
-lint: lint-frontend lint-backend
-
-lint-frontend:
-	cd frontend && npx eslint .
-
-lint-fix: lint-fix-frontend
-	cd backend && cargo clippy --fix --allow-dirty
-
-lint-fix-frontend:
-	cd frontend && npx eslint . --fix
-
-lint-backend:
+lint:
+	cd frontend && pnpm exec eslint .
 	cd backend && cargo clippy -- -D warnings
+	terraform fmt -check -recursive infrastructure/terraform/
+
+lint-fix:
+	cd frontend && pnpm exec eslint . --fix
+	cd backend && cargo clippy --fix --allow-dirty
 
 # ── Format ───────────────────────────────────────────────────
 
-format: format-frontend format-backend
-
-format-frontend:
-	cd frontend && npx prettier --write .
-
-format-check: format-check-frontend
-	cd backend && cargo fmt -- --check
-
-format-check-frontend:
-	cd frontend && npx prettier --check .
-
-format-backend:
+format:
+	cd frontend && pnpm exec prettier --write .
 	cd backend && cargo fmt
+	terraform fmt -recursive infrastructure/terraform/
+
+format-check:
+	cd frontend && pnpm exec prettier --check .
+	cd backend && cargo fmt -- --check
+	terraform fmt -check -recursive infrastructure/terraform/
+
+# ── Typecheck ────────────────────────────────────────────────
+
+typecheck:
+	cd frontend && pnpm exec tsc --noEmit
+
+# ── Test ─────────────────────────────────────────────────────
+
+test:
+	cd frontend && pnpm exec vitest run
+
+# ── Build ────────────────────────────────────────────────────
+
+build:
+	cd frontend && pnpm run build
+	cd backend && cargo lambda build --release --arm64 --output-format zip
+
+# ── Deploy ───────────────────────────────────────────────────
+
+deploy:
+	scripts/deploy.sh

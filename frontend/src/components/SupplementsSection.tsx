@@ -39,10 +39,9 @@ export default function SupplementsSection() {
 }
 
 function buildTimingGroups(doses: DailyDose[], isTrainingDay: boolean, workoutSkipped: boolean) {
-  const visible = doses.filter((d) => {
-    if (d.supplement_type.training_day_only && (!isTrainingDay || workoutSkipped)) return false;
-    return true;
-  });
+  const visible = doses.filter(
+    (d) => !(d.supplement_type.training_day_only && (!isTrainingDay || workoutSkipped))
+  );
 
   const byTiming: Record<string, DailyDose[]> = {};
   for (const d of visible) {
@@ -56,7 +55,8 @@ function buildTimingGroups(doses: DailyDose[], isTrainingDay: boolean, workoutSk
     byTiming[timing].push(d);
   }
 
-  return TIMING_ORDER
-    .filter((t) => byTiming[t]?.length)
-    .map((timing) => ({ timing, items: byTiming[timing] }));
+  return TIMING_ORDER.filter((t) => byTiming[t]?.length).map((timing) => ({
+    timing,
+    items: byTiming[timing],
+  }));
 }

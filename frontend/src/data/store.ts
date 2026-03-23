@@ -60,8 +60,6 @@ type TodayResponse = {
 type DosekitStore = {
   initialLoading: boolean;
   error: string | null;
-
-  // Today — flat slices
   date: string;
   isTrainingDay: boolean;
   sleep: number | null;
@@ -69,26 +67,19 @@ type DosekitStore = {
   workoutDone: boolean | null;
   workoutMotivation: number | null;
   doses: DailyDose[];
-  taken: Record<string, boolean>; // keyed by type ID
-
-  // Setup
+  taken: Record<string, boolean>;
   allTypes: SupplementType[];
   allBrands: SupplementBrand[];
   cycles: Cycle[];
   schedule: TrainingSchedule;
 
-  // Init
   _setToken: (token: string) => void;
   refresh: () => Promise<void>;
-
-  // Granular log actions
   logSleep: (score: number) => void;
   logEnergy: (period: string, score: number) => void;
   logWorkout: (done: boolean) => void;
   logMotivation: (score: number) => void;
   toggleSupplement: (typeId: string) => void;
-
-  // Setup actions
   loadTypes: () => Promise<void>;
   loadBrands: () => Promise<void>;
   loadCycles: () => Promise<void>;
@@ -97,13 +88,34 @@ type DosekitStore = {
 };
 
 function localDate() {
-  return new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+  return new Date().toLocaleDateString("en-CA");
+}
+
+function logAndRefresh(type: string, id: string, value: unknown, refresh: () => Promise<void>) {
+  apiPost(`/log?date=${localDate()}`, { type, id, value }).catch(() => refresh());
+}
+
+function flattenResponse(resp: TodayResponse) {
+  const taken: Record<string, boolean> = {};
+  for (const d of resp.doses) {
+    taken[d.dose.supplement_type.id] = d.taken;
+  }
+  return {
+    date: resp.date,
+    isTrainingDay: resp.is_training_day,
+    sleep: resp.sleep,
+    energy: resp.energy,
+    workoutDone: resp.workout.done,
+    workoutMotivation: resp.workout.motivation,
+    doses: resp.doses.map((d) => d.dose),
+    taken,
+    initialLoading: false,
+  };
 }
 
 export const useStore = create<DosekitStore>((set, get) => ({
   initialLoading: true,
   error: null,
-
   date: "",
   isTrainingDay: false,
   sleep: null,
@@ -112,36 +124,18 @@ export const useStore = create<DosekitStore>((set, get) => ({
   workoutMotivation: null,
   doses: [],
   taken: {},
-
   allTypes: [],
   allBrands: [],
   cycles: [],
   schedule: { days: [] },
 
-  _setToken: () => {
-    get().refresh();
-  },
+  _setToken: () => get().refresh(),
 
   refresh: async () => {
-    const isInitial = get().date === "";
-    if (isInitial) set({ initialLoading: true, error: null });
+    if (get().date === "") set({ initialLoading: true, error: null });
     try {
       const resp = await apiGet<TodayResponse>(`/today?date=${localDate()}`);
-      const taken: Record<string, boolean> = {};
-      for (const d of resp.doses) {
-        taken[d.dose.supplement_type.id] = d.taken;
-      }
-      set({
-        date: resp.date,
-        isTrainingDay: resp.is_training_day,
-        sleep: resp.sleep,
-        energy: resp.energy,
-        workoutDone: resp.workout.done,
-        workoutMotivation: resp.workout.motivation,
-        doses: resp.doses.map((d) => d.dose),
-        taken,
-        initialLoading: false,
-      });
+      set(flattenResponse(resp));
     } catch (e) {
       set({ error: (e as Error).message, initialLoading: false });
     }
@@ -149,50 +143,30 @@ export const useStore = create<DosekitStore>((set, get) => ({
 
   logSleep: (score) => {
     set({ sleep: score });
-    apiPost(`/log?date=${localDate()}`, { type: "sleep", id: "score", value: score }).catch(() => get().refresh());
+    logAndRefresh("sleep", "score", score, get().refresh);
   },
-
   logEnergy: (period, score) => {
     set((s) => ({ energy: { ...s.energy, [period]: score } }));
-    apiPost(`/log?date=${localDate()}`, { type: "energy", id: period, value: score }).catch(() => get().refresh());
+    logAndRefresh("energy", period, score, get().refresh);
   },
-
   logWorkout: (done) => {
     set({ workoutDone: done });
-    apiPost(`/log?date=${localDate()}`, { type: "workout", id: "done", value: done }).catch(() => get().refresh());
+    logAndRefresh("workout", "done", done, get().refresh);
   },
-
   logMotivation: (score) => {
     set({ workoutMotivation: score });
-    apiPost(`/log?date=${localDate()}`, { type: "workout", id: "motivation", value: score }).catch(() => get().refresh());
+    logAndRefresh("workout", "motivation", score, get().refresh);
   },
-
   toggleSupplement: (typeId) => {
     const newVal = !get().taken[typeId];
     set((s) => ({ taken: { ...s.taken, [typeId]: newVal } }));
-    apiPost(`/log?date=${localDate()}`, { type: "supplement", id: typeId, value: newVal }).catch(() => get().refresh());
+    logAndRefresh("supplement", typeId, newVal, get().refresh);
   },
 
-  loadTypes: async () => {
-    const allTypes = await apiGet<SupplementType[]>("/types");
-    set({ allTypes });
-  },
-
-  loadBrands: async () => {
-    const allBrands = await apiGet<SupplementBrand[]>("/brands");
-    set({ allBrands });
-  },
-
-  loadCycles: async () => {
-    const cycles = await apiGet<Cycle[]>("/cycles");
-    set({ cycles });
-  },
-
-  loadSchedule: async () => {
-    const schedule = await apiGet<TrainingSchedule>("/schedule");
-    set({ schedule });
-  },
-
+  loadTypes: async () => set({ allTypes: await apiGet("/types") }),
+  loadBrands: async () => set({ allBrands: await apiGet("/brands") }),
+  loadCycles: async () => set({ cycles: await apiGet("/cycles") }),
+  loadSchedule: async () => set({ schedule: await apiGet("/schedule") }),
   setActiveBrand: async (typeId, brandId) => {
     await apiPut(`/brands/${typeId}/active/${brandId}`);
     get().loadBrands();

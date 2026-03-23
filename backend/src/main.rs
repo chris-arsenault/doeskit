@@ -22,8 +22,7 @@ async fn main() -> Result<(), lambda_http::Error> {
         .json()
         .init();
 
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     // Log connection target (redact password)
     if let Some(at_pos) = database_url.find('@') {

@@ -43,8 +43,13 @@ struct TodayQuery {
     date: Option<String>,
 }
 
-async fn get_today(State(state): State<Arc<AppState>>, Query(query): Query<TodayQuery>) -> AppResult<TodayResponse> {
-    let today = query.date.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
+async fn get_today(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<TodayQuery>,
+) -> AppResult<TodayResponse> {
+    let today = query
+        .date
+        .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
     let types = state.db.list_types().await.map_err(db_err)?;
     let brands = state.db.list_brands().await.map_err(db_err)?;
     let selections = state.db.get_active_selections().await.map_err(db_err)?;
@@ -93,7 +98,8 @@ async fn get_today(State(state): State<Arc<AppState>>, Query(query): Query<Today
         })
         .collect();
 
-    let sleep = logs.iter()
+    let sleep = logs
+        .iter()
         .find(|l| l.r#type == "sleep")
         .and_then(|l| l.value.as_i64())
         .map(|v| v as i32);
@@ -105,11 +111,13 @@ async fn get_today(State(state): State<Arc<AppState>>, Query(query): Query<Today
             .map(|v| v as i32)
     };
 
-    let workout_done = logs.iter()
+    let workout_done = logs
+        .iter()
         .find(|l| l.r#type == "workout" && l.id == "done")
         .and_then(|l| l.value.as_bool());
 
-    let workout_motivation = logs.iter()
+    let workout_motivation = logs
+        .iter()
         .find(|l| l.r#type == "workout" && l.id == "motivation")
         .and_then(|l| l.value.as_i64())
         .map(|v| v as i32);
@@ -133,11 +141,24 @@ async fn get_today(State(state): State<Arc<AppState>>, Query(query): Query<Today
 
 // ── Logging ─────────────────────────────────────────────────
 
-async fn post_log(State(state): State<Arc<AppState>>, Query(query): Query<TodayQuery>, Json(req): Json<LogRequest>) -> StatusCode {
-    let today = query.date.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
-    match state.db.put_log(&today, &req.r#type, &req.id, &req.value).await {
+async fn post_log(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<TodayQuery>,
+    Json(req): Json<LogRequest>,
+) -> StatusCode {
+    let today = query
+        .date
+        .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
+    match state
+        .db
+        .put_log(&today, &req.r#type, &req.id, &req.value)
+        .await
+    {
         Ok(_) => StatusCode::OK,
-        Err(e) => { tracing::error!("DB error: {e}"); StatusCode::INTERNAL_SERVER_ERROR }
+        Err(e) => {
+            tracing::error!("DB error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
     }
 }
 
@@ -157,7 +178,10 @@ async fn set_active_brand(
 ) -> StatusCode {
     match state.db.set_active_brand(&type_id, &brand_id).await {
         Ok(_) => StatusCode::OK,
-        Err(e) => { tracing::error!("DB error: {e}"); StatusCode::INTERNAL_SERVER_ERROR }
+        Err(e) => {
+            tracing::error!("DB error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
     }
 }
 
@@ -185,7 +209,10 @@ async fn create_cycle(
 async fn delete_cycle(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> StatusCode {
     match state.db.delete_cycle(&id).await {
         Ok(_) => StatusCode::OK,
-        Err(e) => { tracing::error!("DB error: {e}"); StatusCode::INTERNAL_SERVER_ERROR }
+        Err(e) => {
+            tracing::error!("DB error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
     }
 }
 
@@ -207,7 +234,10 @@ async fn set_schedule(
 ) -> StatusCode {
     match state.db.put_config("training_schedule", &schedule).await {
         Ok(_) => StatusCode::OK,
-        Err(e) => { tracing::error!("DB error: {e}"); StatusCode::INTERNAL_SERVER_ERROR }
+        Err(e) => {
+            tracing::error!("DB error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
     }
 }
 
@@ -224,13 +254,20 @@ async fn get_history(
         .to_string();
 
     let types = state.db.list_types().await.map_err(db_err)?;
-    let logs = state.db.get_logs_for_range(&start, &end).await.map_err(db_err)?;
+    let logs = state
+        .db
+        .get_logs_for_range(&start, &end)
+        .await
+        .map_err(db_err)?;
 
-    let mut summaries: std::collections::BTreeMap<String, DaySummary> = std::collections::BTreeMap::new();
+    let mut summaries: std::collections::BTreeMap<String, DaySummary> =
+        std::collections::BTreeMap::new();
 
     for log in &logs {
         let date = log.timestamp.get(..10).unwrap_or("").to_string();
-        if date.is_empty() { continue; }
+        if date.is_empty() {
+            continue;
+        }
         let entry = summaries.entry(date.clone()).or_insert_with(|| DaySummary {
             date: date.clone(),
             sleep: None,
@@ -256,7 +293,8 @@ async fn get_history(
             .filter_map(|l| l.value.as_i64())
             .collect();
         if !energy_logs.is_empty() {
-            summary.energy_avg = Some(energy_logs.iter().sum::<i64>() as f64 / energy_logs.len() as f64);
+            summary.energy_avg =
+                Some(energy_logs.iter().sum::<i64>() as f64 / energy_logs.len() as f64);
         }
     }
 
@@ -266,11 +304,13 @@ async fn get_history(
 // ── Dose computation ────────────────────────────────────────
 
 fn compute_servings(target: f64, per_serving: f64, form: &str) -> f64 {
-    if per_serving <= 0.0 { return 1.0; }
+    if per_serving <= 0.0 {
+        return 1.0;
+    }
     let raw = target / per_serving;
     match form {
-        "scoop" => (raw * 2.0).round() / 2.0,  // round to nearest 0.5
-        _ => raw.ceil(),                         // pill, drops, etc: ceil
+        "scoop" => (raw * 2.0).round() / 2.0, // round to nearest 0.5
+        _ => raw.ceil(),                      // pill, drops, etc: ceil
     }
 }
 
@@ -319,7 +359,9 @@ fn is_cycle_on(cycle: &Cycle, today: &str) -> bool {
         Ok(d) => d,
         Err(_) => return true,
     };
-    if current < start { return false; }
+    if current < start {
+        return false;
+    }
     let total_days = (cycle.weeks_on + cycle.weeks_off) * 7;
     let day_in_cycle = (current - start).num_days() as u32 % total_days;
     day_in_cycle < cycle.weeks_on * 7

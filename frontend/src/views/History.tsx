@@ -43,17 +43,11 @@ export default function History() {
               <div className={styles.date}>{formatShortDate(day.date)}</div>
               <div className={styles.stats}>
                 <Stat icon={<Moon size={14} />} value={day.sleep} />
-                <Stat icon={<Zap size={14} />} value={day.energy_avg != null ? Math.round(day.energy_avg) : null} />
-                <span className={styles.stat}>
-                  <Dumbbell size={14} />
-                  {day.workout === true ? (
-                    <Check size={14} className={styles.yes} />
-                  ) : day.workout === false ? (
-                    <X size={14} className={styles.no} />
-                  ) : (
-                    <span className={shared.muted}>-</span>
-                  )}
-                </span>
+                <Stat
+                  icon={<Zap size={14} />}
+                  value={day.energy_avg != null ? Math.round(day.energy_avg) : null}
+                />
+                <WorkoutStat workout={day.workout} />
                 <span className={`${styles.stat} ${styles.suppStat}`}>
                   {day.supplements_taken}/{day.supplements_total}
                 </span>
@@ -71,6 +65,29 @@ function Stat({ icon, value }: { icon: React.ReactNode; value: number | null }) 
     <span className={styles.stat}>
       {icon}
       {value != null ? value : <span className={shared.muted}>-</span>}
+    </span>
+  );
+}
+
+function WorkoutStat({ workout }: { workout: boolean | null }) {
+  if (workout === true)
+    return (
+      <span className={styles.stat}>
+        <Dumbbell size={14} />
+        <Check size={14} className={styles.yes} />
+      </span>
+    );
+  if (workout === false)
+    return (
+      <span className={styles.stat}>
+        <Dumbbell size={14} />
+        <X size={14} className={styles.no} />
+      </span>
+    );
+  return (
+    <span className={styles.stat}>
+      <Dumbbell size={14} />
+      <span className={shared.muted}>-</span>
     </span>
   );
 }

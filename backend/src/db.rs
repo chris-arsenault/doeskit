@@ -19,7 +19,9 @@ impl PgPool {
             .map_err(|e| Error::Db(format!("Failed to parse RDS CA bundle: {e}")))?;
         let mut root_store = rustls::RootCertStore::empty();
         for cert in certs {
-            root_store.add(cert).map_err(|e| Error::Db(format!("Failed to add RDS cert: {e}")))?;
+            root_store
+                .add(cert)
+                .map_err(|e| Error::Db(format!("Failed to add RDS cert: {e}")))?;
         }
         let tls_config = rustls::ClientConfig::builder()
             .with_root_certificates(root_store)
@@ -52,17 +54,20 @@ impl PgPool {
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;
 
-        Ok(rows.iter().map(|r| SupplementType {
-            id: r.get("id"),
-            name: r.get("name"),
-            timing: r.get("timing"),
-            training_day_only: r.get("training_day_only"),
-            cycle_id: r.get("cycle_id"),
-            target_dose: r.get("target_dose"),
-            target_unit: r.get("target_unit"),
-            instructions: r.get("instructions"),
-            sort_order: r.get("sort_order"),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| SupplementType {
+                id: r.get("id"),
+                name: r.get("name"),
+                timing: r.get("timing"),
+                training_day_only: r.get("training_day_only"),
+                cycle_id: r.get("cycle_id"),
+                target_dose: r.get("target_dose"),
+                target_unit: r.get("target_unit"),
+                instructions: r.get("instructions"),
+                sort_order: r.get("sort_order"),
+            })
+            .collect())
     }
 
     // ── Supplement Brands ───────────────────────────────────
@@ -78,31 +83,39 @@ impl PgPool {
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;
 
-        Ok(rows.iter().map(|r| SupplementBrand {
-            id: r.get("id"),
-            type_id: r.get("type_id"),
-            brand: r.get("brand"),
-            product_name: r.get("product_name"),
-            serving_dose: r.get("serving_dose"),
-            serving_unit: r.get("serving_unit"),
-            serving_size: r.get("serving_size"),
-            form: r.get("form"),
-            instructions: r.get("instructions"),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| SupplementBrand {
+                id: r.get("id"),
+                type_id: r.get("type_id"),
+                brand: r.get("brand"),
+                product_name: r.get("product_name"),
+                serving_dose: r.get("serving_dose"),
+                serving_unit: r.get("serving_unit"),
+                serving_size: r.get("serving_size"),
+                form: r.get("form"),
+                instructions: r.get("instructions"),
+            })
+            .collect())
     }
 
-    pub async fn get_active_selections(&self) -> Result<std::collections::HashMap<String, String>, Error> {
+    pub async fn get_active_selections(
+        &self,
+    ) -> Result<std::collections::HashMap<String, String>, Error> {
         let client = self.connect().await?;
         let rows = client
             .query("SELECT type_id, brand_id FROM active_selections", &[])
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;
 
-        Ok(rows.iter().map(|r| {
-            let type_id: String = r.get("type_id");
-            let brand_id: String = r.get("brand_id");
-            (type_id, brand_id)
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let type_id: String = r.get("type_id");
+                let brand_id: String = r.get("brand_id");
+                (type_id, brand_id)
+            })
+            .collect())
     }
 
     pub async fn set_active_brand(&self, type_id: &str, brand_id: &str) -> Result<(), Error> {
@@ -123,20 +136,26 @@ impl PgPool {
     pub async fn list_cycles(&self) -> Result<Vec<Cycle>, Error> {
         let client = self.connect().await?;
         let rows = client
-            .query("SELECT id, name, weeks_on, weeks_off, start_date FROM cycles ORDER BY name", &[])
+            .query(
+                "SELECT id, name, weeks_on, weeks_off, start_date FROM cycles ORDER BY name",
+                &[],
+            )
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;
 
-        Ok(rows.iter().map(|r| {
-            let start: chrono::NaiveDate = r.get("start_date");
-            Cycle {
-                id: r.get("id"),
-                name: r.get("name"),
-                weeks_on: r.get::<_, i32>("weeks_on") as u32,
-                weeks_off: r.get::<_, i32>("weeks_off") as u32,
-                start_date: start.format("%Y-%m-%d").to_string(),
-            }
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let start: chrono::NaiveDate = r.get("start_date");
+                Cycle {
+                    id: r.get("id"),
+                    name: r.get("name"),
+                    weeks_on: r.get::<_, i32>("weeks_on") as u32,
+                    weeks_off: r.get::<_, i32>("weeks_off") as u32,
+                    start_date: start.format("%Y-%m-%d").to_string(),
+                }
+            })
+            .collect())
     }
 
     pub async fn put_cycle(&self, cycle: &Cycle) -> Result<(), Error> {
@@ -150,7 +169,13 @@ impl PgPool {
                  ON CONFLICT (id) DO UPDATE SET
                    name = EXCLUDED.name, weeks_on = EXCLUDED.weeks_on,
                    weeks_off = EXCLUDED.weeks_off, start_date = EXCLUDED.start_date",
-                &[&cycle.id, &cycle.name, &(cycle.weeks_on as i32), &(cycle.weeks_off as i32), &start],
+                &[
+                    &cycle.id,
+                    &cycle.name,
+                    &(cycle.weeks_on as i32),
+                    &(cycle.weeks_off as i32),
+                    &start,
+                ],
             )
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;
@@ -168,7 +193,10 @@ impl PgPool {
 
     // ── Config ──────────────────────────────────────────────
 
-    pub async fn get_config<T: serde::de::DeserializeOwned>(&self, key: &str) -> Result<Option<T>, Error> {
+    pub async fn get_config<T: serde::de::DeserializeOwned>(
+        &self,
+        key: &str,
+    ) -> Result<Option<T>, Error> {
         let client = self.connect().await?;
         let row = client
             .query_opt("SELECT value FROM config WHERE key = $1", &[&key])
@@ -200,7 +228,13 @@ impl PgPool {
 
     // ── Logs ────────────────────────────────────────────────
 
-    pub async fn put_log(&self, date: &str, entry_type: &str, id: &str, value: &serde_json::Value) -> Result<(), Error> {
+    pub async fn put_log(
+        &self,
+        date: &str,
+        entry_type: &str,
+        id: &str,
+        value: &serde_json::Value,
+    ) -> Result<(), Error> {
         let client = self.connect().await?;
         let d = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
             .map_err(|e| Error::Db(e.to_string()))?;
@@ -221,19 +255,25 @@ impl PgPool {
         let d = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
             .map_err(|e| Error::Db(e.to_string()))?;
         let rows = client
-            .query("SELECT entry_type, entry_id, value, created_at FROM logs WHERE date = $1", &[&d])
+            .query(
+                "SELECT entry_type, entry_id, value, created_at FROM logs WHERE date = $1",
+                &[&d],
+            )
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;
 
-        Ok(rows.iter().map(|r| {
-            let ts: chrono::DateTime<chrono::Utc> = r.get("created_at");
-            LogEntry {
-                r#type: r.get("entry_type"),
-                id: r.get("entry_id"),
-                value: r.get("value"),
-                timestamp: ts.to_rfc3339(),
-            }
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let ts: chrono::DateTime<chrono::Utc> = r.get("created_at");
+                LogEntry {
+                    r#type: r.get("entry_type"),
+                    id: r.get("entry_id"),
+                    value: r.get("value"),
+                    timestamp: ts.to_rfc3339(),
+                }
+            })
+            .collect())
     }
 
     pub async fn get_logs_for_range(&self, start: &str, end: &str) -> Result<Vec<LogEntry>, Error> {
@@ -251,15 +291,18 @@ impl PgPool {
             .await
             .map_err(|e2| Error::Db(format!("{e2:?}")))?;
 
-        Ok(rows.iter().map(|r| {
-            let d: chrono::NaiveDate = r.get("date");
-            LogEntry {
-                r#type: r.get("entry_type"),
-                id: r.get("entry_id"),
-                value: r.get("value"),
-                timestamp: d.format("%Y-%m-%d").to_string(),
-            }
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let d: chrono::NaiveDate = r.get("date");
+                LogEntry {
+                    r#type: r.get("entry_type"),
+                    id: r.get("entry_id"),
+                    value: r.get("value"),
+                    timestamp: d.format("%Y-%m-%d").to_string(),
+                }
+            })
+            .collect())
     }
 }
 

@@ -194,8 +194,7 @@ resource "aws_lb_listener_rule" "api" {
   }
 
   action {
-    type  = "jwt-validation"
-    order = 1
+    type = "jwt-validation"
 
     jwt_validation {
       issuer        = local.cognito_issuer
@@ -205,7 +204,6 @@ resource "aws_lb_listener_rule" "api" {
 
   action {
     type             = "forward"
-    order            = 2
     target_group_arn = aws_lb_target_group.api.arn
   }
 }

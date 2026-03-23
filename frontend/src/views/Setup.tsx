@@ -34,7 +34,13 @@ export default function Setup() {
   );
 }
 
-function ScheduleSection({ schedule, onChanged }: { schedule: { days: string[] }; onChanged: () => void }) {
+function ScheduleSection({
+  schedule,
+  onChanged,
+}: {
+  schedule: { days: string[] };
+  onChanged: () => void;
+}) {
   const toggleDay = async (day: string) => {
     const days = schedule.days.includes(day)
       ? schedule.days.filter((d) => d !== day)
@@ -107,7 +113,8 @@ function TypesSection({
                       </span>
                     )}
                   </div>
-                  {typeBrands.length > 1 && (expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />)}
+                  {typeBrands.length > 1 &&
+                    (expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />)}
                 </button>
                 {expanded && typeBrands.length > 1 && (
                   <div className={styles.brandList}>
@@ -117,8 +124,12 @@ function TypesSection({
                         className={`${styles.brandBtn} ${activeBrand && b.id === activeBrand.id ? styles.brandActive : ""}`}
                         onClick={() => setActiveBrand(t.id, b.id)}
                       >
-                        <span className={styles.brandName}>{b.brand} {b.product_name}</span>
-                        <span className={shared.muted}>{b.serving_size} = {b.serving_dose} {b.serving_unit}</span>
+                        <span className={styles.brandName}>
+                          {b.brand} {b.product_name}
+                        </span>
+                        <span className={shared.muted}>
+                          {b.serving_size} = {b.serving_dose} {b.serving_unit}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -167,7 +178,9 @@ function CyclesSection({ cycles, onChanged }: { cycles: Cycle[]; onChanged: () =
           <input name="weeks_on" type="number" placeholder="Weeks on" min="1" required />
           <input name="weeks_off" type="number" placeholder="Weeks off" min="1" required />
           <input name="start_date" type="date" required />
-          <button type="submit" className={`${shared.btnPrimary} ${shared.btnSm}`}>Add</button>
+          <button type="submit" className={`${shared.btnPrimary} ${shared.btnSm}`}>
+            Add
+          </button>
         </form>
       )}
       {cycles.length === 0 ? (
@@ -182,7 +195,10 @@ function CyclesSection({ cycles, onChanged }: { cycles: Cycle[]; onChanged: () =
                   {c.weeks_on}w on / {c.weeks_off}w off &middot; started {c.start_date}
                 </span>
               </div>
-              <button className={`${shared.iconBtn} ${shared.iconBtnDanger}`} onClick={() => handleDelete(c.id)}>
+              <button
+                className={`${shared.iconBtn} ${shared.iconBtnDanger}`}
+                onClick={() => handleDelete(c.id)}
+              >
                 <Trash2 size={16} />
               </button>
             </li>

@@ -1,0 +1,80 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: dosekit-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.29.3 --activate
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: pnpm exec eslint .
+
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: pnpm exec tsc --noEmit
+
+      - name: Format check frontend
+        working-directory: frontend
+        run: pnpm exec prettier --check .
+
+      - name: Clippy
+        working-directory: backend
+        run: cargo clippy -- -D warnings
+
+      - name: Rustfmt
+        working-directory: backend
+        run: cargo fmt -- --check
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive infrastructure/terraform/
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: [lint]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: dosekit-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v4
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.OIDC_ROLE }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+          aws-region: us-east-1
+      - name: Deploy
+        env:
+          STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
+        run: bash scripts/deploy.sh
+      - uses: chris-arsenault/platform/.github/actions/report-build@main
+        if: always()
+        with:
+          lint-passed: ${{ needs.lint.result == 'success' }}
