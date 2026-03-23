@@ -58,9 +58,7 @@ export default function App() {
     );
   }
   if (auth.status === "signedOut") {
-    return (
-      <LoginScreen onSignIn={handleSignIn} />
-    );
+    return <LoginScreen onSignIn={handleSignIn} />;
   }
   return <AuthenticatedApp token={auth.token} username={auth.username} onSignOut={handleSignOut} />;
 }

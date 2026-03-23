@@ -454,7 +454,12 @@ mod tests {
     #[test]
     fn test_training_day_sunday() {
         let schedule = TrainingSchedule {
-            days: vec!["tuesday".into(), "thursday".into(), "saturday".into(), "sunday".into()],
+            days: vec![
+                "tuesday".into(),
+                "thursday".into(),
+                "saturday".into(),
+                "sunday".into(),
+            ],
         };
         // 2026-03-22 is a Sunday
         assert!(check_training_day(&schedule, "2026-03-22"));
@@ -463,7 +468,12 @@ mod tests {
     #[test]
     fn test_not_training_day_monday() {
         let schedule = TrainingSchedule {
-            days: vec!["tuesday".into(), "thursday".into(), "saturday".into(), "sunday".into()],
+            days: vec![
+                "tuesday".into(),
+                "thursday".into(),
+                "saturday".into(),
+                "sunday".into(),
+            ],
         };
         // 2026-03-23 is a Monday
         assert!(!check_training_day(&schedule, "2026-03-23"));

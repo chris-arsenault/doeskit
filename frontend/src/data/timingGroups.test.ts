@@ -108,9 +108,7 @@ describe("buildTimingGroups: timing collapse", () => {
   });
 
   it("moves workout-window to morning when workout skipped", () => {
-    const doses = [
-      makeDose({ id: "collagen", timing: "pre_workout", training_day_only: false }),
-    ];
+    const doses = [makeDose({ id: "collagen", timing: "pre_workout", training_day_only: false })];
     const groups = buildTimingGroups(doses, true, true);
     expect(groups).toHaveLength(1);
     expect(groups[0].timing).toBe("morning");
