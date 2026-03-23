@@ -69,6 +69,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v4
+      - name: Install cargo-lambda
+        run: pip3 install cargo-lambda
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.29.3 --activate
       - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ secrets.OIDC_ROLE }}
