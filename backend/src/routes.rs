@@ -366,3 +366,187 @@ fn is_cycle_on(cycle: &Cycle, today: &str) -> bool {
     let day_in_cycle = (current - start).num_days() as u32 % total_days;
     day_in_cycle < cycle.weeks_on * 7
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── compute_servings ────────────────────────────────────
+
+    #[test]
+    fn test_compute_servings_pill_ceils_up() {
+        // 2000mg target, 1040mg/softgel -> ceil(1.92) = 2
+        assert_eq!(compute_servings(2000.0, 1040.0, "pill"), 2.0);
+    }
+
+    #[test]
+    fn test_compute_servings_pill_exact() {
+        assert_eq!(compute_servings(5.0, 5.0, "pill"), 1.0);
+    }
+
+    #[test]
+    fn test_compute_servings_pill_ceils_small_remainder() {
+        // 2000mg target, 813mg/gelcap -> ceil(2.46) = 3
+        assert_eq!(compute_servings(2000.0, 813.0, "pill"), 3.0);
+    }
+
+    #[test]
+    fn test_compute_servings_drops_ceils() {
+        // 4000 IU target, 500 IU/drop -> 8 drops
+        assert_eq!(compute_servings(4000.0, 500.0, "drops"), 8.0);
+    }
+
+    #[test]
+    fn test_compute_servings_scoop_rounds_half() {
+        // 37g target, 25g/scoop -> 1.48 -> round to 1.5
+        assert_eq!(compute_servings(37.0, 25.0, "scoop"), 1.5);
+    }
+
+    #[test]
+    fn test_compute_servings_scoop_exact() {
+        assert_eq!(compute_servings(15.0, 15.0, "scoop"), 1.0);
+    }
+
+    #[test]
+    fn test_compute_servings_scoop_rounds_to_nearest_half() {
+        // 400mg target, 200mg/scoop -> 2.0 (exact)
+        assert_eq!(compute_servings(400.0, 200.0, "scoop"), 2.0);
+    }
+
+    #[test]
+    fn test_compute_servings_zero_serving_returns_one() {
+        assert_eq!(compute_servings(100.0, 0.0, "pill"), 1.0);
+    }
+
+    // ── format_dose_label ───────────────────────────────────
+
+    #[test]
+    fn test_format_dose_label_single_capsule() {
+        assert_eq!(format_dose_label(1.0, "1 capsule", "pill"), "1 capsule");
+    }
+
+    #[test]
+    fn test_format_dose_label_multiple_capsules_pluralizes() {
+        assert_eq!(format_dose_label(2.0, "1 capsule", "pill"), "2 capsules");
+    }
+
+    #[test]
+    fn test_format_dose_label_scoop_fractional() {
+        assert_eq!(format_dose_label(1.5, "1 scoop", "scoop"), "1.5 scoops");
+    }
+
+    #[test]
+    fn test_format_dose_label_drops_no_pluralize() {
+        // "drops" already plural, form = "drops" skips pluralization
+        assert_eq!(format_dose_label(8.0, "1 drop", "drops"), "8 drop");
+    }
+
+    #[test]
+    fn test_format_dose_label_complex_serving_size() {
+        assert_eq!(
+            format_dose_label(1.0, "1 scoop (7.7g)", "scoop"),
+            "1 scoop (7.7g)"
+        );
+    }
+
+    // ── check_training_day ──────────────────────────────────
+
+    #[test]
+    fn test_training_day_sunday() {
+        let schedule = TrainingSchedule {
+            days: vec!["tuesday".into(), "thursday".into(), "saturday".into(), "sunday".into()],
+        };
+        // 2026-03-22 is a Sunday
+        assert!(check_training_day(&schedule, "2026-03-22"));
+    }
+
+    #[test]
+    fn test_not_training_day_monday() {
+        let schedule = TrainingSchedule {
+            days: vec!["tuesday".into(), "thursday".into(), "saturday".into(), "sunday".into()],
+        };
+        // 2026-03-23 is a Monday
+        assert!(!check_training_day(&schedule, "2026-03-23"));
+    }
+
+    #[test]
+    fn test_training_day_case_insensitive() {
+        let schedule = TrainingSchedule {
+            days: vec!["Tuesday".into()],
+        };
+        // 2026-03-24 is a Tuesday
+        assert!(check_training_day(&schedule, "2026-03-24"));
+    }
+
+    #[test]
+    fn test_training_day_empty_schedule() {
+        let schedule = TrainingSchedule { days: vec![] };
+        assert!(!check_training_day(&schedule, "2026-03-22"));
+    }
+
+    #[test]
+    fn test_training_day_invalid_date() {
+        let schedule = TrainingSchedule {
+            days: vec!["sunday".into()],
+        };
+        assert!(!check_training_day(&schedule, "not-a-date"));
+    }
+
+    // ── is_cycle_on ─────────────────────────────────────────
+
+    fn ashwagandha_cycle() -> Cycle {
+        Cycle {
+            id: "ashwagandha-cycle".into(),
+            name: "Ashwagandha 8/4".into(),
+            weeks_on: 8,
+            weeks_off: 4,
+            start_date: "2026-01-26".into(),
+        }
+    }
+
+    #[test]
+    fn test_cycle_on_first_day() {
+        assert!(is_cycle_on(&ashwagandha_cycle(), "2026-01-26"));
+    }
+
+    #[test]
+    fn test_cycle_on_last_day_of_on_period() {
+        // 8 weeks = 56 days. Last on day = start + 55 = 2026-03-22
+        assert!(is_cycle_on(&ashwagandha_cycle(), "2026-03-22"));
+    }
+
+    #[test]
+    fn test_cycle_off_first_day_of_off_period() {
+        // First off day = start + 56 = 2026-03-23
+        assert!(!is_cycle_on(&ashwagandha_cycle(), "2026-03-23"));
+    }
+
+    #[test]
+    fn test_cycle_off_last_day_of_off_period() {
+        // 4 weeks off = 28 days. Last off day = start + 83 = 2026-04-19
+        assert!(!is_cycle_on(&ashwagandha_cycle(), "2026-04-19"));
+    }
+
+    #[test]
+    fn test_cycle_on_wraps_to_second_period() {
+        // Second on period starts at start + 84 = 2026-04-20
+        assert!(is_cycle_on(&ashwagandha_cycle(), "2026-04-20"));
+    }
+
+    #[test]
+    fn test_cycle_before_start_returns_false() {
+        assert!(!is_cycle_on(&ashwagandha_cycle(), "2026-01-25"));
+    }
+
+    #[test]
+    fn test_cycle_invalid_start_date_returns_true() {
+        let cycle = Cycle {
+            id: "bad".into(),
+            name: "Bad".into(),
+            weeks_on: 4,
+            weeks_off: 2,
+            start_date: "bad-date".into(),
+        };
+        assert!(is_cycle_on(&cycle, "2026-03-22"));
+    }
+}

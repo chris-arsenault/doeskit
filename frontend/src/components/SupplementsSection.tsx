@@ -1,17 +1,9 @@
-import { useStore, type DailyDose } from "../data/store";
+import { useStore } from "../data/store";
+import { buildTimingGroups, TIMING_LABELS } from "../data/timingGroups";
 import { Clock } from "lucide-react";
 import SupplementRow from "./SupplementRow";
 import shared from "../styles/shared.module.css";
 import styles from "./SupplementsSection.module.css";
-
-const TIMING_ORDER = ["morning", "pre_workout", "intra_workout", "post_workout", "evening"];
-const TIMING_LABELS: Record<string, string> = {
-  morning: "Morning",
-  pre_workout: "Pre-Workout",
-  intra_workout: "Intra-Workout",
-  post_workout: "Post-Workout",
-  evening: "Evening",
-};
 
 export default function SupplementsSection() {
   const doses = useStore((s) => s.doses);
@@ -36,27 +28,4 @@ export default function SupplementsSection() {
       ))}
     </>
   );
-}
-
-function buildTimingGroups(doses: DailyDose[], isTrainingDay: boolean, workoutSkipped: boolean) {
-  const visible = doses.filter(
-    (d) => !(d.supplement_type.training_day_only && (!isTrainingDay || workoutSkipped))
-  );
-
-  const byTiming: Record<string, DailyDose[]> = {};
-  for (const d of visible) {
-    let timing = d.supplement_type.timing || "morning";
-    if (!isTrainingDay || workoutSkipped) {
-      if (timing === "pre_workout" || timing === "intra_workout" || timing === "post_workout") {
-        timing = "morning";
-      }
-    }
-    if (!byTiming[timing]) byTiming[timing] = [];
-    byTiming[timing].push(d);
-  }
-
-  return TIMING_ORDER.filter((t) => byTiming[t]?.length).map((timing) => ({
-    timing,
-    items: byTiming[timing],
-  }));
 }
