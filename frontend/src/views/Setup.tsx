@@ -78,7 +78,7 @@ function TypesSection({
 }) {
   const [expandedType, setExpandedType] = useState<string | null>(null);
   const setActiveBrand = useStore((s) => s.setActiveBrand);
-  const doses = useStore((s) => s.doses);
+  const activeSelections = useStore((s) => s.activeSelections);
 
   return (
     <section className={shared.card}>
@@ -89,8 +89,8 @@ function TypesSection({
         <ul className={styles.list}>
           {types.map((t) => {
             const typeBrands = brands.filter((b) => b.type_id === t.id);
-            const activeDose = doses.find((d) => d.supplement_type.id === t.id);
-            const activeBrand = activeDose?.brand ?? typeBrands[0];
+            const activeBrandId = activeSelections[t.id];
+            const activeBrand = typeBrands.find((b) => b.id === activeBrandId) ?? typeBrands[0];
             const expanded = expandedType === t.id;
             const cycle = cycles.find((c) => c.id === t.cycle_id);
 

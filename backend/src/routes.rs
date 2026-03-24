@@ -25,6 +25,7 @@ pub fn api_routes() -> Router<Arc<AppState>> {
         .route("/log/supplement", post(log_supplement))
         .route("/types", get(list_types))
         .route("/brands", get(list_brands))
+        .route("/selections", get(get_selections))
         .route("/brands/{type_id}/active/{brand_id}", put(set_active_brand))
         .route("/cycles", get(list_cycles))
         .route("/cycles", post(create_cycle))
@@ -86,10 +87,11 @@ async fn get_today(
             true
         })
         .filter_map(|t| {
-            // For past logs, use the brand that was recorded. Otherwise use active selection.
+            // Use logged brand only if taken=true (preserves historical accuracy).
+            // Otherwise use active selection (reflects current brand choice).
             let supp_log = supp_logs.iter().find(|l| l.type_id == t.id);
-            let brand = if let Some(log) = supp_log {
-                brands.iter().find(|b| b.id == log.brand_id)
+            let brand = if supp_log.is_some_and(|l| l.taken) {
+                brands.iter().find(|b| b.id == supp_log.unwrap().brand_id)
             } else {
                 let brand_id = selections.get(&t.id)?;
                 brands.iter().find(|b| b.id == *brand_id)
@@ -239,6 +241,17 @@ async fn list_types(State(state): State<Arc<AppState>>) -> AppResult<Vec<Supplem
 
 async fn list_brands(State(state): State<Arc<AppState>>) -> AppResult<Vec<SupplementBrand>> {
     state.db.list_brands().await.map(Json).map_err(db_err)
+}
+
+async fn get_selections(
+    State(state): State<Arc<AppState>>,
+) -> AppResult<std::collections::HashMap<String, String>> {
+    state
+        .db
+        .get_active_selections()
+        .await
+        .map(Json)
+        .map_err(db_err)
 }
 
 async fn set_active_brand(

@@ -71,6 +71,7 @@ type DosekitStore = {
   taken: Record<string, boolean>;
   allTypes: SupplementType[];
   allBrands: SupplementBrand[];
+  activeSelections: Record<string, string>; // type_id -> brand_id
   cycles: Cycle[];
   schedule: TrainingSchedule;
 
@@ -151,6 +152,7 @@ const INITIAL_STATE = {
   taken: {} as Record<string, boolean>,
   allTypes: [] as SupplementType[],
   allBrands: [] as SupplementBrand[],
+  activeSelections: {} as Record<string, string>,
   cycles: [] as Cycle[],
   schedule: { days: [] } as TrainingSchedule,
 };
@@ -213,7 +215,13 @@ export const useStore = create<DosekitStore>((set, get) => ({
   },
 
   loadTypes: async () => set({ allTypes: await apiGet("/types") }),
-  loadBrands: async () => set({ allBrands: await apiGet("/brands") }),
+  loadBrands: async () => {
+    const [allBrands, activeSelections] = await Promise.all([
+      apiGet<SupplementBrand[]>("/brands"),
+      apiGet<Record<string, string>>("/selections"),
+    ]);
+    set({ allBrands, activeSelections });
+  },
   loadCycles: async () => set({ cycles: await apiGet("/cycles") }),
   loadSchedule: async () => set({ schedule: await apiGet("/schedule") }),
   setActiveBrand: async (typeId, brandId) => {
