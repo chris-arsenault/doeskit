@@ -19,7 +19,10 @@ fn db_err(e: crate::db::Error) -> StatusCode {
 pub fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/today", get(get_today))
-        .route("/log", post(post_log))
+        .route("/log/sleep", post(log_sleep))
+        .route("/log/energy", post(log_energy))
+        .route("/log/workout", post(log_workout))
+        .route("/log/supplement", post(log_supplement))
         .route("/types", get(list_types))
         .route("/brands", get(list_brands))
         .route("/brands/{type_id}/active/{brand_id}", put(set_active_brand))
@@ -39,22 +42,28 @@ async fn health() -> Json<serde_json::Value> {
 // ── Today ───────────────────────────────────────────────────
 
 #[derive(Debug, serde::Deserialize)]
-struct TodayQuery {
+struct DateQuery {
     date: Option<String>,
+}
+
+fn resolve_date(query: &DateQuery) -> String {
+    query
+        .date
+        .clone()
+        .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string())
 }
 
 async fn get_today(
     State(state): State<Arc<AppState>>,
-    Query(query): Query<TodayQuery>,
+    Query(query): Query<DateQuery>,
 ) -> AppResult<TodayResponse> {
-    let today = query
-        .date
-        .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
+    let date = resolve_date(&query);
     let types = state.db.list_types().await.map_err(db_err)?;
     let brands = state.db.list_brands().await.map_err(db_err)?;
     let selections = state.db.get_active_selections().await.map_err(db_err)?;
     let cycles = state.db.list_cycles().await.map_err(db_err)?;
-    let logs = state.db.get_logs_for_date(&today).await.map_err(db_err)?;
+    let day = state.db.get_day(&date).await.map_err(db_err)?;
+    let supp_logs = state.db.get_supplement_logs(&date).await.map_err(db_err)?;
     let schedule: TrainingSchedule = state
         .db
         .get_config("training_schedule")
@@ -62,17 +71,14 @@ async fn get_today(
         .map_err(db_err)?
         .unwrap_or(TrainingSchedule { days: vec![] });
 
-    let is_training_day = check_training_day(&schedule, &today);
+    let is_training_day = check_training_day(&schedule, &date);
 
-    // Build daily doses from active brands
     let doses: Vec<DoseStatus> = types
         .iter()
         .filter(|t| {
-            // Filter by cycle
             if let Some(ref cid) = t.cycle_id {
-                let cycle = cycles.iter().find(|c| c.id == *cid);
-                if let Some(c) = cycle {
-                    if !is_cycle_on(c, &today) {
+                if let Some(c) = cycles.iter().find(|c| c.id == *cid) {
+                    if !is_cycle_on(c, &date) {
                         return false;
                     }
                 }
@@ -80,78 +86,141 @@ async fn get_today(
             true
         })
         .filter_map(|t| {
-            let brand_id = selections.get(&t.id)?;
-            let brand = brands.iter().find(|b| b.id == *brand_id)?;
-            let servings_needed = compute_servings(t.target_dose, brand.serving_dose, &brand.form);
-            let dose_label = format_dose_label(servings_needed, &brand.serving_size, &brand.form);
+            // For past logs, use the brand that was recorded. Otherwise use active selection.
+            let supp_log = supp_logs.iter().find(|l| l.type_id == t.id);
+            let brand = if let Some(log) = supp_log {
+                brands.iter().find(|b| b.id == log.brand_id)
+            } else {
+                let brand_id = selections.get(&t.id)?;
+                brands.iter().find(|b| b.id == *brand_id)
+            }?;
+            let servings = compute_servings(t.target_dose, brand.serving_dose, &brand.form);
+            let label = format_dose_label(servings, &brand.serving_size, &brand.form);
             Some(DoseStatus {
                 dose: DailyDose {
                     supplement_type: t.clone(),
                     brand: brand.clone(),
-                    servings_needed,
-                    dose_label,
+                    servings_needed: servings,
+                    dose_label: label,
                 },
-                taken: logs.iter().any(|l| {
-                    l.r#type == "supplement" && l.id == t.id && l.value == serde_json::json!(true)
-                }),
+                taken: supp_log.is_some_and(|l| l.taken),
             })
         })
         .collect();
 
-    let sleep = logs
-        .iter()
-        .find(|l| l.r#type == "sleep")
-        .and_then(|l| l.value.as_i64())
-        .map(|v| v as i32);
-
-    let energy_val = |period: &str| -> Option<i32> {
-        logs.iter()
-            .find(|l| l.r#type == "energy" && l.id == period)
-            .and_then(|l| l.value.as_i64())
-            .map(|v| v as i32)
-    };
-
-    let workout_done = logs
-        .iter()
-        .find(|l| l.r#type == "workout" && l.id == "done")
-        .and_then(|l| l.value.as_bool());
-
-    let workout_motivation = logs
-        .iter()
-        .find(|l| l.r#type == "workout" && l.id == "motivation")
-        .and_then(|l| l.value.as_i64())
-        .map(|v| v as i32);
-
     Ok(Json(TodayResponse {
-        date: today,
+        date,
         is_training_day,
         doses,
-        sleep,
+        sleep: day.sleep,
         energy: EnergyStatus {
-            morning: energy_val("morning"),
-            afternoon: energy_val("afternoon"),
-            evening: energy_val("evening"),
+            morning: day.energy_morning,
+            afternoon: day.energy_afternoon,
+            evening: day.energy_evening,
         },
         workout: WorkoutStatus {
-            done: workout_done,
-            motivation: workout_motivation,
+            done: day.workout_done,
+            motivation: day.workout_motivation,
         },
     }))
 }
 
-// ── Logging ─────────────────────────────────────────────────
+// ── Typed log endpoints ─────────────────────────────────────
 
-async fn post_log(
+#[derive(Debug, serde::Deserialize)]
+struct ScoreBody {
+    value: i32,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct EnergyBody {
+    period: String,
+    value: i32,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct WorkoutBody {
+    done: Option<bool>,
+    motivation: Option<i32>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct SupplementBody {
+    type_id: String,
+    brand_id: String,
+    taken: bool,
+}
+
+async fn log_sleep(
     State(state): State<Arc<AppState>>,
-    Query(query): Query<TodayQuery>,
-    Json(req): Json<LogRequest>,
+    Query(query): Query<DateQuery>,
+    Json(body): Json<ScoreBody>,
 ) -> StatusCode {
-    let today = query
-        .date
-        .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
+    let date = resolve_date(&query);
+    match state.db.set_day_field(&date, "sleep", body.value).await {
+        Ok(_) => StatusCode::OK,
+        Err(e) => {
+            tracing::error!("DB error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
+async fn log_energy(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<DateQuery>,
+    Json(body): Json<EnergyBody>,
+) -> StatusCode {
+    let date = resolve_date(&query);
+    let field = match body.period.as_str() {
+        "morning" => "energy_morning",
+        "afternoon" => "energy_afternoon",
+        "evening" => "energy_evening",
+        _ => return StatusCode::BAD_REQUEST,
+    };
+    match state.db.set_day_field(&date, field, body.value).await {
+        Ok(_) => StatusCode::OK,
+        Err(e) => {
+            tracing::error!("DB error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
+async fn log_workout(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<DateQuery>,
+    Json(body): Json<WorkoutBody>,
+) -> StatusCode {
+    let date = resolve_date(&query);
+    if let Some(done) = body.done {
+        if let Err(e) = state.db.set_workout_done(&date, done).await {
+            tracing::error!("DB error: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
+    }
+    if let Some(motivation) = body.motivation {
+        if let Err(e) = state
+            .db
+            .set_day_field(&date, "workout_motivation", motivation)
+            .await
+        {
+            tracing::error!("DB error: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
+    }
+    StatusCode::OK
+}
+
+async fn log_supplement(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<DateQuery>,
+    Json(body): Json<SupplementBody>,
+) -> StatusCode {
+    let date = resolve_date(&query);
     match state
         .db
-        .put_log(&today, &req.r#type, &req.id, &req.value)
+        .set_supplement_taken(&date, &body.type_id, &body.brand_id, body.taken)
         .await
     {
         Ok(_) => StatusCode::OK,
@@ -247,58 +316,50 @@ async fn get_history(
     State(state): State<Arc<AppState>>,
     Query(query): Query<HistoryQuery>,
 ) -> AppResult<Vec<DaySummary>> {
-    let days = query.days.unwrap_or(14);
+    let days_count = query.days.unwrap_or(14);
     let end = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let start = (chrono::Utc::now() - chrono::Duration::days(days as i64))
+    let start = (chrono::Utc::now() - chrono::Duration::days(days_count as i64))
         .format("%Y-%m-%d")
         .to_string();
 
     let types = state.db.list_types().await.map_err(db_err)?;
-    let logs = state
+    let day_logs = state
         .db
-        .get_logs_for_range(&start, &end)
+        .get_days_range(&start, &end)
+        .await
+        .map_err(db_err)?;
+    let supp_counts = state
+        .db
+        .count_supplements_taken(&start, &end)
         .await
         .map_err(db_err)?;
 
-    let mut summaries: std::collections::BTreeMap<String, DaySummary> =
-        std::collections::BTreeMap::new();
+    let total = types.len() as u32;
+    let summaries: Vec<DaySummary> = day_logs
+        .into_iter()
+        .map(|d| {
+            let energy_vals: Vec<f64> = [d.energy_morning, d.energy_afternoon, d.energy_evening]
+                .iter()
+                .filter_map(|v| v.map(|x| x as f64))
+                .collect();
+            let energy_avg = if energy_vals.is_empty() {
+                None
+            } else {
+                Some(energy_vals.iter().sum::<f64>() / energy_vals.len() as f64)
+            };
+            let taken = supp_counts.get(&d.date).copied().unwrap_or(0);
+            DaySummary {
+                date: d.date,
+                sleep: d.sleep,
+                energy_avg,
+                workout: d.workout_done,
+                supplements_taken: taken,
+                supplements_total: total,
+            }
+        })
+        .collect();
 
-    for log in &logs {
-        let date = log.timestamp.get(..10).unwrap_or("").to_string();
-        if date.is_empty() {
-            continue;
-        }
-        let entry = summaries.entry(date.clone()).or_insert_with(|| DaySummary {
-            date: date.clone(),
-            sleep: None,
-            energy_avg: None,
-            workout: None,
-            supplements_taken: 0,
-            supplements_total: types.len() as u32,
-        });
-
-        match log.r#type.as_str() {
-            "sleep" => entry.sleep = log.value.as_i64().map(|v| v as i32),
-            "energy" => {}
-            "workout" if log.id == "done" => entry.workout = log.value.as_bool(),
-            "supplement" if log.value == serde_json::json!(true) => entry.supplements_taken += 1,
-            _ => {}
-        }
-    }
-
-    for (date, summary) in summaries.iter_mut() {
-        let energy_logs: Vec<i64> = logs
-            .iter()
-            .filter(|l| l.r#type == "energy" && l.timestamp.starts_with(date.as_str()))
-            .filter_map(|l| l.value.as_i64())
-            .collect();
-        if !energy_logs.is_empty() {
-            summary.energy_avg =
-                Some(energy_logs.iter().sum::<i64>() as f64 / energy_logs.len() as f64);
-        }
-    }
-
-    Ok(Json(summaries.into_values().rev().collect()))
+    Ok(Json(summaries))
 }
 
 // ── Dose computation ────────────────────────────────────────
@@ -321,7 +382,6 @@ fn format_dose_label(servings: f64, serving_size: &str, form: &str) -> String {
         format!("{servings:.1}")
     };
 
-    // Extract unit from serving_size (e.g., "1 capsule" -> "capsules", "1 scoop" -> "scoops")
     let unit = serving_size
         .split_whitespace()
         .skip(1)
@@ -375,7 +435,6 @@ mod tests {
 
     #[test]
     fn test_compute_servings_pill_ceils_up() {
-        // 2000mg target, 1040mg/softgel -> ceil(1.92) = 2
         assert_eq!(compute_servings(2000.0, 1040.0, "pill"), 2.0);
     }
 
@@ -386,19 +445,16 @@ mod tests {
 
     #[test]
     fn test_compute_servings_pill_ceils_small_remainder() {
-        // 2000mg target, 813mg/gelcap -> ceil(2.46) = 3
         assert_eq!(compute_servings(2000.0, 813.0, "pill"), 3.0);
     }
 
     #[test]
     fn test_compute_servings_drops_ceils() {
-        // 4000 IU target, 500 IU/drop -> 8 drops
         assert_eq!(compute_servings(4000.0, 500.0, "drops"), 8.0);
     }
 
     #[test]
     fn test_compute_servings_scoop_rounds_half() {
-        // 37g target, 25g/scoop -> 1.48 -> round to 1.5
         assert_eq!(compute_servings(37.0, 25.0, "scoop"), 1.5);
     }
 
@@ -409,7 +465,6 @@ mod tests {
 
     #[test]
     fn test_compute_servings_scoop_rounds_to_nearest_half() {
-        // 400mg target, 200mg/scoop -> 2.0 (exact)
         assert_eq!(compute_servings(400.0, 200.0, "scoop"), 2.0);
     }
 
@@ -437,7 +492,6 @@ mod tests {
 
     #[test]
     fn test_format_dose_label_drops_no_pluralize() {
-        // "drops" already plural, form = "drops" skips pluralization
         assert_eq!(format_dose_label(8.0, "1 drop", "drops"), "8 drop");
     }
 
@@ -461,7 +515,6 @@ mod tests {
                 "sunday".into(),
             ],
         };
-        // 2026-03-22 is a Sunday
         assert!(check_training_day(&schedule, "2026-03-22"));
     }
 
@@ -475,7 +528,6 @@ mod tests {
                 "sunday".into(),
             ],
         };
-        // 2026-03-23 is a Monday
         assert!(!check_training_day(&schedule, "2026-03-23"));
     }
 
@@ -484,7 +536,6 @@ mod tests {
         let schedule = TrainingSchedule {
             days: vec!["Tuesday".into()],
         };
-        // 2026-03-24 is a Tuesday
         assert!(check_training_day(&schedule, "2026-03-24"));
     }
 
@@ -521,25 +572,21 @@ mod tests {
 
     #[test]
     fn test_cycle_on_last_day_of_on_period() {
-        // 8 weeks = 56 days. Last on day = start + 55 = 2026-03-22
         assert!(is_cycle_on(&ashwagandha_cycle(), "2026-03-22"));
     }
 
     #[test]
     fn test_cycle_off_first_day_of_off_period() {
-        // First off day = start + 56 = 2026-03-23
         assert!(!is_cycle_on(&ashwagandha_cycle(), "2026-03-23"));
     }
 
     #[test]
     fn test_cycle_off_last_day_of_off_period() {
-        // 4 weeks off = 28 days. Last off day = start + 83 = 2026-04-19
         assert!(!is_cycle_on(&ashwagandha_cycle(), "2026-04-19"));
     }
 
     #[test]
     fn test_cycle_on_wraps_to_second_period() {
-        // Second on period starts at start + 84 = 2026-04-20
         assert!(is_cycle_on(&ashwagandha_cycle(), "2026-04-20"));
     }
 

@@ -106,14 +106,14 @@ function offsetDate(dateStr: string, days: number): string {
   return d.toLocaleDateString("en-CA");
 }
 
-function logAndRefresh(
-  date: string,
-  type: string,
-  id: string,
-  value: unknown,
-  refresh: () => Promise<void>
-) {
-  apiPost(`/log?date=${date}`, { type, id, value }).catch(() => refresh());
+function postLog(path: string, date: string, body: unknown, refresh: () => Promise<void>) {
+  apiPost(`${path}?date=${date}`, body).catch(() => refresh());
+}
+
+function navigateTo(current: string, offset: number): string | null {
+  const today = effectiveDate();
+  const next = offsetDate(current, offset);
+  return next > today ? null : next;
 }
 
 function flattenResponse(resp: TodayResponse) {
@@ -134,23 +134,30 @@ function flattenResponse(resp: TodayResponse) {
   };
 }
 
-export const useStore = create<DosekitStore>((set, get) => ({
+const INITIAL_STATE = {
   initialLoading: true,
   error: null,
-  selectedDate: effectiveDate(),
   date: "",
   isTrainingDay: false,
-  sleep: null,
-  energy: { morning: null, afternoon: null, evening: null },
-  workoutDone: null,
-  workoutMotivation: null,
-  doses: [],
-  taken: {},
-  allTypes: [],
-  allBrands: [],
-  cycles: [],
-  schedule: { days: [] },
+  sleep: null as number | null,
+  energy: {
+    morning: null as number | null,
+    afternoon: null as number | null,
+    evening: null as number | null,
+  },
+  workoutDone: null as boolean | null,
+  workoutMotivation: null as number | null,
+  doses: [] as DailyDose[],
+  taken: {} as Record<string, boolean>,
+  allTypes: [] as SupplementType[],
+  allBrands: [] as SupplementBrand[],
+  cycles: [] as Cycle[],
+  schedule: { days: [] } as TrainingSchedule,
+};
 
+export const useStore = create<DosekitStore>((set, get) => ({
+  ...INITIAL_STATE,
+  selectedDate: effectiveDate(),
   _setToken: () => get().refresh(),
 
   refresh: async () => {
@@ -165,14 +172,12 @@ export const useStore = create<DosekitStore>((set, get) => ({
   },
 
   navigateDay: (offset) => {
-    const current = get().selectedDate;
-    const today = effectiveDate();
-    const next = offsetDate(current, offset);
-    if (next > today) return;
-    set({ selectedDate: next });
-    get().refresh();
+    const next = navigateTo(get().selectedDate, offset);
+    if (next) {
+      set({ selectedDate: next });
+      get().refresh();
+    }
   },
-
   goToToday: () => {
     set({ selectedDate: effectiveDate() });
     get().refresh();
@@ -180,24 +185,31 @@ export const useStore = create<DosekitStore>((set, get) => ({
 
   logSleep: (score) => {
     set({ sleep: score });
-    logAndRefresh(get().selectedDate, "sleep", "score", score, get().refresh);
+    postLog("/log/sleep", get().selectedDate, { value: score }, get().refresh);
   },
   logEnergy: (period, score) => {
     set((s) => ({ energy: { ...s.energy, [period]: score } }));
-    logAndRefresh(get().selectedDate, "energy", period, score, get().refresh);
+    postLog("/log/energy", get().selectedDate, { period, value: score }, get().refresh);
   },
   logWorkout: (done) => {
     set({ workoutDone: done });
-    logAndRefresh(get().selectedDate, "workout", "done", done, get().refresh);
+    postLog("/log/workout", get().selectedDate, { done }, get().refresh);
   },
   logMotivation: (score) => {
     set({ workoutMotivation: score });
-    logAndRefresh(get().selectedDate, "workout", "motivation", score, get().refresh);
+    postLog("/log/workout", get().selectedDate, { motivation: score }, get().refresh);
   },
   toggleSupplement: (typeId) => {
     const newVal = !get().taken[typeId];
     set((s) => ({ taken: { ...s.taken, [typeId]: newVal } }));
-    logAndRefresh(get().selectedDate, "supplement", typeId, newVal, get().refresh);
+    const dose = get().doses.find((d) => d.supplement_type.id === typeId);
+    const brandId = dose?.brand.id ?? "";
+    postLog(
+      "/log/supplement",
+      get().selectedDate,
+      { type_id: typeId, brand_id: brandId, taken: newVal },
+      get().refresh
+    );
   },
 
   loadTypes: async () => set({ allTypes: await apiGet("/types") }),

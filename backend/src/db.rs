@@ -226,57 +226,73 @@ impl PgPool {
         Ok(())
     }
 
-    // ── Logs ────────────────────────────────────────────────
+    // ── Day log ─────────────────────────────────────────────
 
-    pub async fn put_log(
-        &self,
-        date: &str,
-        entry_type: &str,
-        id: &str,
-        value: &serde_json::Value,
-    ) -> Result<(), Error> {
+    pub async fn ensure_day(&self, date: &str) -> Result<chrono::NaiveDate, Error> {
         let client = self.connect().await?;
         let d = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
             .map_err(|e| Error::Db(e.to_string()))?;
         client
             .execute(
-                "INSERT INTO logs (date, entry_type, entry_id, value)
-                 VALUES ($1, $2, $3, $4)
-                 ON CONFLICT (date, entry_type, entry_id) DO UPDATE SET value = EXCLUDED.value",
-                &[&d, &entry_type, &id, value],
+                "INSERT INTO day_log (date) VALUES ($1) ON CONFLICT DO NOTHING",
+                &[&d],
+            )
+            .await
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
+        Ok(d)
+    }
+
+    pub async fn get_day(&self, date: &str) -> Result<DayLog, Error> {
+        let client = self.connect().await?;
+        let d = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
+            .map_err(|e| Error::Db(e.to_string()))?;
+        let row = client
+            .query_opt("SELECT * FROM day_log WHERE date = $1", &[&d])
+            .await
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
+
+        Ok(match row {
+            Some(r) => DayLog {
+                date: date.to_string(),
+                sleep: r.get("sleep"),
+                energy_morning: r.get("energy_morning"),
+                energy_afternoon: r.get("energy_afternoon"),
+                energy_evening: r.get("energy_evening"),
+                workout_done: r.get("workout_done"),
+                workout_motivation: r.get("workout_motivation"),
+            },
+            None => DayLog::empty(date),
+        })
+    }
+
+    pub async fn set_day_field(&self, date: &str, field: &str, value: i32) -> Result<(), Error> {
+        let d = self.ensure_day(date).await?;
+        let client = self.connect().await?;
+        let sql = format!(
+            "UPDATE day_log SET {field} = $1 WHERE date = $2",
+            field = field
+        );
+        client
+            .execute(&sql, &[&value, &d])
+            .await
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
+        Ok(())
+    }
+
+    pub async fn set_workout_done(&self, date: &str, done: bool) -> Result<(), Error> {
+        let d = self.ensure_day(date).await?;
+        let client = self.connect().await?;
+        client
+            .execute(
+                "UPDATE day_log SET workout_done = $1 WHERE date = $2",
+                &[&done, &d],
             )
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;
         Ok(())
     }
 
-    pub async fn get_logs_for_date(&self, date: &str) -> Result<Vec<LogEntry>, Error> {
-        let client = self.connect().await?;
-        let d = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
-            .map_err(|e| Error::Db(e.to_string()))?;
-        let rows = client
-            .query(
-                "SELECT entry_type, entry_id, value, created_at FROM logs WHERE date = $1",
-                &[&d],
-            )
-            .await
-            .map_err(|e| Error::Db(format!("{e:?}")))?;
-
-        Ok(rows
-            .iter()
-            .map(|r| {
-                let ts: chrono::DateTime<chrono::Utc> = r.get("created_at");
-                LogEntry {
-                    r#type: r.get("entry_type"),
-                    id: r.get("entry_id"),
-                    value: r.get("value"),
-                    timestamp: ts.to_rfc3339(),
-                }
-            })
-            .collect())
-    }
-
-    pub async fn get_logs_for_range(&self, start: &str, end: &str) -> Result<Vec<LogEntry>, Error> {
+    pub async fn get_days_range(&self, start: &str, end: &str) -> Result<Vec<DayLog>, Error> {
         let client = self.connect().await?;
         let s = chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
             .map_err(|e| Error::Db(e.to_string()))?;
@@ -284,8 +300,7 @@ impl PgPool {
             .map_err(|e2| Error::Db(e2.to_string()))?;
         let rows = client
             .query(
-                "SELECT date, entry_type, entry_id, value, created_at FROM logs
-                 WHERE date BETWEEN $1 AND $2 ORDER BY date, entry_type",
+                "SELECT * FROM day_log WHERE date BETWEEN $1 AND $2 ORDER BY date DESC",
                 &[&s, &e],
             )
             .await
@@ -295,12 +310,90 @@ impl PgPool {
             .iter()
             .map(|r| {
                 let d: chrono::NaiveDate = r.get("date");
-                LogEntry {
-                    r#type: r.get("entry_type"),
-                    id: r.get("entry_id"),
-                    value: r.get("value"),
-                    timestamp: d.format("%Y-%m-%d").to_string(),
+                DayLog {
+                    date: d.format("%Y-%m-%d").to_string(),
+                    sleep: r.get("sleep"),
+                    energy_morning: r.get("energy_morning"),
+                    energy_afternoon: r.get("energy_afternoon"),
+                    energy_evening: r.get("energy_evening"),
+                    workout_done: r.get("workout_done"),
+                    workout_motivation: r.get("workout_motivation"),
                 }
+            })
+            .collect())
+    }
+
+    // ── Supplement logs ────────────────────────────────────
+
+    pub async fn get_supplement_logs(&self, date: &str) -> Result<Vec<SupplementLog>, Error> {
+        let client = self.connect().await?;
+        let d = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
+            .map_err(|e| Error::Db(e.to_string()))?;
+        let rows = client
+            .query(
+                "SELECT type_id, brand_id, taken FROM supplement_logs WHERE date = $1",
+                &[&d],
+            )
+            .await
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
+
+        Ok(rows
+            .iter()
+            .map(|r| SupplementLog {
+                type_id: r.get("type_id"),
+                brand_id: r.get("brand_id"),
+                taken: r.get("taken"),
+            })
+            .collect())
+    }
+
+    pub async fn set_supplement_taken(
+        &self,
+        date: &str,
+        type_id: &str,
+        brand_id: &str,
+        taken: bool,
+    ) -> Result<(), Error> {
+        let d = self.ensure_day(date).await?;
+        let client = self.connect().await?;
+        client
+            .execute(
+                "INSERT INTO supplement_logs (date, type_id, brand_id, taken)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (date, type_id) DO UPDATE SET brand_id = EXCLUDED.brand_id, taken = EXCLUDED.taken",
+                &[&d, &type_id, &brand_id, &taken],
+            )
+            .await
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
+        Ok(())
+    }
+
+    pub async fn count_supplements_taken(
+        &self,
+        start: &str,
+        end: &str,
+    ) -> Result<std::collections::HashMap<String, u32>, Error> {
+        let client = self.connect().await?;
+        let s = chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
+            .map_err(|e| Error::Db(e.to_string()))?;
+        let e = chrono::NaiveDate::parse_from_str(end, "%Y-%m-%d")
+            .map_err(|e2| Error::Db(e2.to_string()))?;
+        let rows = client
+            .query(
+                "SELECT date, COUNT(*) as cnt FROM supplement_logs
+                 WHERE date BETWEEN $1 AND $2 AND taken = true
+                 GROUP BY date",
+                &[&s, &e],
+            )
+            .await
+            .map_err(|e2| Error::Db(format!("{e2:?}")))?;
+
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let d: chrono::NaiveDate = r.get("date");
+                let cnt: i64 = r.get("cnt");
+                (d.format("%Y-%m-%d").to_string(), cnt as u32)
             })
             .collect())
     }

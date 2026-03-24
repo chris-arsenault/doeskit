@@ -66,21 +66,38 @@ pub struct TrainingSchedule {
     pub days: Vec<String>,
 }
 
-// ── Log entries ─────────────────────────────────────────────
+// ── Day log ─────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
-pub struct LogRequest {
-    pub r#type: String,
-    pub id: String,
-    pub value: serde_json::Value,
+#[derive(Debug, Clone, Serialize)]
+pub struct DayLog {
+    pub date: String,
+    pub sleep: Option<i32>,
+    pub energy_morning: Option<i32>,
+    pub energy_afternoon: Option<i32>,
+    pub energy_evening: Option<i32>,
+    pub workout_done: Option<bool>,
+    pub workout_motivation: Option<i32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LogEntry {
-    pub r#type: String,
-    pub id: String,
-    pub value: serde_json::Value,
-    pub timestamp: String,
+impl DayLog {
+    pub fn empty(date: &str) -> Self {
+        Self {
+            date: date.to_string(),
+            sleep: None,
+            energy_morning: None,
+            energy_afternoon: None,
+            energy_evening: None,
+            workout_done: None,
+            workout_motivation: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SupplementLog {
+    pub type_id: String,
+    pub brand_id: String,
+    pub taken: bool,
 }
 
 // ── Today composite ─────────────────────────────────────────
