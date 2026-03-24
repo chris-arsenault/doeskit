@@ -60,6 +60,7 @@ type TodayResponse = {
 type DosekitStore = {
   initialLoading: boolean;
   error: string | null;
+  selectedDate: string;
   date: string;
   isTrainingDay: boolean;
   sleep: number | null;
@@ -75,6 +76,8 @@ type DosekitStore = {
 
   _setToken: (token: string) => void;
   refresh: () => Promise<void>;
+  navigateDay: (offset: number) => void;
+  goToToday: () => void;
   logSleep: (score: number) => void;
   logEnergy: (period: string, score: number) => void;
   logWorkout: (done: boolean) => void;
@@ -87,12 +90,30 @@ type DosekitStore = {
   setActiveBrand: (typeId: string, brandId: string) => Promise<void>;
 };
 
-function localDate() {
-  return new Date().toLocaleDateString("en-CA");
+const LATE_NIGHT_CUTOFF_HOUR = 3;
+
+function effectiveDate(): string {
+  const now = new Date();
+  if (now.getHours() < LATE_NIGHT_CUTOFF_HOUR) {
+    now.setDate(now.getDate() - 1);
+  }
+  return now.toLocaleDateString("en-CA");
 }
 
-function logAndRefresh(type: string, id: string, value: unknown, refresh: () => Promise<void>) {
-  apiPost(`/log?date=${localDate()}`, { type, id, value }).catch(() => refresh());
+function offsetDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + "T12:00:00");
+  d.setDate(d.getDate() + days);
+  return d.toLocaleDateString("en-CA");
+}
+
+function logAndRefresh(
+  date: string,
+  type: string,
+  id: string,
+  value: unknown,
+  refresh: () => Promise<void>
+) {
+  apiPost(`/log?date=${date}`, { type, id, value }).catch(() => refresh());
 }
 
 function flattenResponse(resp: TodayResponse) {
@@ -116,6 +137,7 @@ function flattenResponse(resp: TodayResponse) {
 export const useStore = create<DosekitStore>((set, get) => ({
   initialLoading: true,
   error: null,
+  selectedDate: effectiveDate(),
   date: "",
   isTrainingDay: false,
   sleep: null,
@@ -132,35 +154,50 @@ export const useStore = create<DosekitStore>((set, get) => ({
   _setToken: () => get().refresh(),
 
   refresh: async () => {
+    const { selectedDate } = get();
     if (get().date === "") set({ initialLoading: true, error: null });
     try {
-      const resp = await apiGet<TodayResponse>(`/today?date=${localDate()}`);
+      const resp = await apiGet<TodayResponse>(`/today?date=${selectedDate}`);
       set(flattenResponse(resp));
     } catch (e) {
       set({ error: (e as Error).message, initialLoading: false });
     }
   },
 
+  navigateDay: (offset) => {
+    const current = get().selectedDate;
+    const today = effectiveDate();
+    const next = offsetDate(current, offset);
+    if (next > today) return;
+    set({ selectedDate: next });
+    get().refresh();
+  },
+
+  goToToday: () => {
+    set({ selectedDate: effectiveDate() });
+    get().refresh();
+  },
+
   logSleep: (score) => {
     set({ sleep: score });
-    logAndRefresh("sleep", "score", score, get().refresh);
+    logAndRefresh(get().selectedDate, "sleep", "score", score, get().refresh);
   },
   logEnergy: (period, score) => {
     set((s) => ({ energy: { ...s.energy, [period]: score } }));
-    logAndRefresh("energy", period, score, get().refresh);
+    logAndRefresh(get().selectedDate, "energy", period, score, get().refresh);
   },
   logWorkout: (done) => {
     set({ workoutDone: done });
-    logAndRefresh("workout", "done", done, get().refresh);
+    logAndRefresh(get().selectedDate, "workout", "done", done, get().refresh);
   },
   logMotivation: (score) => {
     set({ workoutMotivation: score });
-    logAndRefresh("workout", "motivation", score, get().refresh);
+    logAndRefresh(get().selectedDate, "workout", "motivation", score, get().refresh);
   },
   toggleSupplement: (typeId) => {
     const newVal = !get().taken[typeId];
     set((s) => ({ taken: { ...s.taken, [typeId]: newVal } }));
-    logAndRefresh("supplement", typeId, newVal, get().refresh);
+    logAndRefresh(get().selectedDate, "supplement", typeId, newVal, get().refresh);
   },
 
   loadTypes: async () => set({ allTypes: await apiGet("/types") }),
