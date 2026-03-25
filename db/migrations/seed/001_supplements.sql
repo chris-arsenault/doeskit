@@ -31,7 +31,7 @@ INSERT INTO supplement_types (id, name, timing, training_day_only, cycle_id, tar
   ('pre-workout',    'Pre-Workout',               'pre_workout',   true,  NULL,                 1,     'serving',      '30 min pre-training on empty stomach.',                                                 140),
   ('intra-carb',     'Intra-Workout Carbs',       'intra_workout', true,  NULL,                 1,     'serving',      'Mix in water. Sustained carb energy during training.',                                  150),
   ('intra-amino',    'Intra-Workout Aminos',      'intra_workout', true,  NULL,                 1,     'serving',      'Mix in water. Anti-catabolic signal during training, not a protein replacement.',        160),
-  ('whey',           'Whey Protein',              'post_workout',  true,  NULL,                 28,    'g protein',    'Post-workout. If shake IS the meal, increase to ~42g.',                                 170),
+  ('post-protein',   'Post-Workout Protein',      'post_workout',  true,  NULL,                 28,    'g protein',    'Post-workout. If shake IS the meal, increase to ~42g.',                                 170),
   ('bpc157-am',      'BPC-157 (AM)',              'morning',       false, NULL,                 1,     'serving',      'Finishing current supply then discontinuing — wait for legal injectable access.',        180),
   ('bpc157-pm',      'BPC-157 (PM)',              'evening',       false, NULL,                 1,     'serving',      'Finishing current supply then discontinuing — wait for legal injectable access.',        185)
 ON CONFLICT (id) DO UPDATE SET
@@ -67,7 +67,9 @@ INSERT INTO supplement_brands (id, type_id, brand, product_name, serving_dose, s
   ('intra-cdx-tl',          'intra-carb',  'Transparent Labs',    'Cyclic Dextrin',                     1,      'serving',      '1 scoop (~27g)',    'scoop', '25g highly branched cyclic dextrin per scoop.'),
   ('intra-pf',              'intra-carb',  'Precision Fuel',      'Carb & Electrolyte Drink Mix PF 30', 1,      'serving',      '2 scoops / 500ml', 'scoop', '30g carbs (maltodextrin:fructose 2:1), 500mg sodium. Hypotonic. Informed Sport.'),
   ('intra-amino-momentous', 'intra-amino', 'Momentous',           'Vital Aminos',                       1,      'serving',      '1 scoop (11.5g)',   'scoop', '9 EAAs, 2.5g leucine. NSF Certified for Sport.'),
-  ('whey-tl',               'whey',        'Transparent Labs',    'Grass-Fed Whey Protein Isolate',     28,     'g protein',    '1 scoop (~32g)',    'scoop', 'Grass-fed American dairy. Stevia sweetened. Informed Choice certified.'),
+  ('whey-tl',               'post-protein', 'Transparent Labs',   'Grass-Fed Whey Protein Isolate',     28,     'g protein',    '1 scoop (~32g)',    'scoop', 'Grass-fed American dairy. Stevia sweetened. Informed Choice certified.'),
+  ('plant-thorne',           'post-protein', 'Thorne',             'Plant Protein (Chocolate)',          22,     'g protein',    '2 scoops',          'scoop', 'Pea + rice + chia. 140 cal, 4g fat, 0g added sugar. NSF Certified for Sport.'),
+  ('plant-orgain',           'post-protein', 'Orgain',             'Organic Protein + 50 Superfoods',   21,     'g protein',    '2 scoops',          'scoop', 'Pea + rice + mung bean + chia. 160 cal, 18g carbs, 8g fiber. Use for non-training days.'),
   ('bpc157-am-infiniwell',  'bpc157-am',   'InfiniWell',          'BPC DELAYED PRO',                    1,      'serving',      '1 capsule',         'pill',  '500mcg BPC per capsule. SNAC absorption enhancer, delayed release.'),
   ('bpc157-pm-infiniwell',  'bpc157-pm',   'InfiniWell',          'BPC DELAYED PRO',                    1,      'serving',      '1 capsule',         'pill',  '500mcg BPC per capsule. SNAC absorption enhancer, delayed release.')
 ON CONFLICT (id) DO UPDATE SET
@@ -96,7 +98,7 @@ INSERT INTO active_selections (type_id, brand_id) VALUES
   ('pre-workout', 'preworkout-tl'),
   ('intra-carb',  'intra-cdx-tl'),
   ('intra-amino', 'intra-amino-momentous'),
-  ('whey',        'whey-tl'),
+  ('post-protein', 'whey-tl'),
   ('bpc157-am',   'bpc157-am-infiniwell'),
   ('bpc157-pm',   'bpc157-pm-infiniwell')
 ON CONFLICT (type_id) DO NOTHING;
