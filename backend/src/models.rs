@@ -8,6 +8,7 @@ pub struct SupplementType {
     pub name: String,
     pub timing: String,
     pub training_day_only: bool,
+    pub active: bool,
     pub cycle_id: Option<String>,
     pub target_dose: f64,
     pub target_unit: String,

@@ -7,6 +7,7 @@ function makeDose(overrides: Partial<SupplementType> & { id: string }): DailyDos
     name: overrides.id,
     timing: "morning",
     training_day_only: false,
+    active: true,
     target_dose: 1,
     target_unit: "serving",
     sort_order: 0,

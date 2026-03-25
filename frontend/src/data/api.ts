@@ -25,11 +25,14 @@ export async function apiGet<T = unknown>(path: string): Promise<T> {
   return res.json();
 }
 
-export async function apiPut(path: string): Promise<void> {
+export async function apiPut(path: string, body?: unknown): Promise<void> {
   const token = await getToken();
   const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}${path}`, { method: "PUT", headers });
+  const options: RequestInit = { method: "PUT", headers };
+  if (body !== undefined) options.body = JSON.stringify(body);
+  const res = await fetch(`${API_BASE}${path}`, options);
   if (!res.ok) throw new Error(`${path} failed: ${res.status}`);
 }
 

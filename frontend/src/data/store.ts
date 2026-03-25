@@ -8,6 +8,7 @@ export type SupplementType = {
   name: string;
   timing: string;
   training_day_only: boolean;
+  active: boolean;
   cycle_id?: string;
   target_dose: number;
   target_unit: string;
@@ -89,6 +90,12 @@ type DosekitStore = {
   loadCycles: () => Promise<void>;
   loadSchedule: () => Promise<void>;
   setActiveBrand: (typeId: string, brandId: string) => Promise<void>;
+  updateType: (
+    id: string,
+    timing: string,
+    trainingDayOnly: boolean,
+    active: boolean
+  ) => Promise<void>;
 };
 
 const LATE_NIGHT_CUTOFF_HOUR = 3;
@@ -227,6 +234,11 @@ export const useStore = create<DosekitStore>((set, get) => ({
   setActiveBrand: async (typeId, brandId) => {
     await apiPut(`/brands/${typeId}/active/${brandId}`);
     get().loadBrands();
+    get().refresh();
+  },
+  updateType: async (id, timing, trainingDayOnly, active) => {
+    await apiPut(`/types/${id}`, { timing, training_day_only: trainingDayOnly, active });
+    get().loadTypes();
     get().refresh();
   },
 }));

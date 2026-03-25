@@ -24,6 +24,7 @@ pub fn api_routes() -> Router<Arc<AppState>> {
         .route("/log/workout", post(log_workout))
         .route("/log/supplement", post(log_supplement))
         .route("/types", get(list_types))
+        .route("/types/{id}", put(update_type))
         .route("/brands", get(list_brands))
         .route("/selections", get(get_selections))
         .route("/brands/{type_id}/active/{brand_id}", put(set_active_brand))
@@ -77,6 +78,9 @@ async fn get_today(
     let doses: Vec<DoseStatus> = types
         .iter()
         .filter(|t| {
+            if !t.active {
+                return false;
+            }
             if let Some(ref cid) = t.cycle_id {
                 if let Some(c) = cycles.iter().find(|c| c.id == *cid) {
                     if !is_cycle_on(c, &date) {
@@ -237,6 +241,31 @@ async fn log_supplement(
 
 async fn list_types(State(state): State<Arc<AppState>>) -> AppResult<Vec<SupplementType>> {
     state.db.list_types().await.map(Json).map_err(db_err)
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct UpdateTypeBody {
+    timing: String,
+    training_day_only: bool,
+    active: bool,
+}
+
+async fn update_type(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<UpdateTypeBody>,
+) -> StatusCode {
+    match state
+        .db
+        .update_type(&id, &body.timing, body.training_day_only, body.active)
+        .await
+    {
+        Ok(_) => StatusCode::OK,
+        Err(e) => {
+            tracing::error!("DB error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
 }
 
 async fn list_brands(State(state): State<Arc<AppState>>) -> AppResult<Vec<SupplementBrand>> {

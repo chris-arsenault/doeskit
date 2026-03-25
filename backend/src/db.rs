@@ -47,7 +47,7 @@ impl PgPool {
         let client = self.connect().await?;
         let rows = client
             .query(
-                "SELECT id, name, timing, training_day_only, cycle_id, target_dose::float8, target_unit, instructions, sort_order
+                "SELECT id, name, timing, training_day_only, active, cycle_id, target_dose::float8, target_unit, instructions, sort_order
                  FROM supplement_types ORDER BY sort_order, name",
                 &[],
             )
@@ -61,6 +61,7 @@ impl PgPool {
                 name: r.get("name"),
                 timing: r.get("timing"),
                 training_day_only: r.get("training_day_only"),
+                active: r.get("active"),
                 cycle_id: r.get("cycle_id"),
                 target_dose: r.get("target_dose"),
                 target_unit: r.get("target_unit"),
@@ -68,6 +69,24 @@ impl PgPool {
                 sort_order: r.get("sort_order"),
             })
             .collect())
+    }
+
+    pub async fn update_type(
+        &self,
+        id: &str,
+        timing: &str,
+        training_day_only: bool,
+        active: bool,
+    ) -> Result<(), Error> {
+        let client = self.connect().await?;
+        client
+            .execute(
+                "UPDATE supplement_types SET timing = $1, training_day_only = $2, active = $3 WHERE id = $4",
+                &[&timing, &training_day_only, &active, &id],
+            )
+            .await
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
+        Ok(())
     }
 
     // ── Supplement Brands ───────────────────────────────────

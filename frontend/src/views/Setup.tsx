@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useStore, type SupplementType, type SupplementBrand, type Cycle } from "../data/store";
 import { apiPost, apiDelete } from "../data/api";
-import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import TypeRow from "../components/TypeRow";
+import { Plus, Trash2 } from "lucide-react";
 import shared from "../styles/shared.module.css";
 import styles from "./Setup.module.css";
 
@@ -77,7 +78,6 @@ function TypesSection({
   cycles: Cycle[];
 }) {
   const [expandedType, setExpandedType] = useState<string | null>(null);
-  const setActiveBrand = useStore((s) => s.setActiveBrand);
   const activeSelections = useStore((s) => s.activeSelections);
 
   return (
@@ -89,52 +89,18 @@ function TypesSection({
         <ul className={styles.list}>
           {types.map((t) => {
             const typeBrands = brands.filter((b) => b.type_id === t.id);
-            const activeBrandId = activeSelections[t.id];
-            const activeBrand = typeBrands.find((b) => b.id === activeBrandId) ?? typeBrands[0];
-            const expanded = expandedType === t.id;
-            const cycle = cycles.find((c) => c.id === t.cycle_id);
-
+            const abId = activeSelections[t.id];
+            const activeBrand = typeBrands.find((b) => b.id === abId) ?? typeBrands[0];
             return (
-              <li key={t.id} className={styles.typeItem}>
-                <button
-                  className={styles.typeHeader}
-                  onClick={() => setExpandedType(expanded ? null : t.id)}
-                >
-                  <div>
-                    <strong>{t.name}</strong>
-                    <span className={shared.muted}>
-                      {t.target_dose} {t.target_unit} &middot; {t.timing.replace("_", "-")}
-                      {t.training_day_only ? " (training)" : ""}
-                      {cycle ? ` (${cycle.name})` : ""}
-                    </span>
-                    {activeBrand && (
-                      <span className={shared.muted}>
-                        Active: {activeBrand.brand} {activeBrand.product_name}
-                      </span>
-                    )}
-                  </div>
-                  {typeBrands.length > 1 &&
-                    (expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />)}
-                </button>
-                {expanded && typeBrands.length > 1 && (
-                  <div className={styles.brandList}>
-                    {typeBrands.map((b) => (
-                      <button
-                        key={b.id}
-                        className={`${styles.brandBtn} ${activeBrand && b.id === activeBrand.id ? styles.brandActive : ""}`}
-                        onClick={() => setActiveBrand(t.id, b.id)}
-                      >
-                        <span className={styles.brandName}>
-                          {b.brand} {b.product_name}
-                        </span>
-                        <span className={shared.muted}>
-                          {b.serving_size} = {b.serving_dose} {b.serving_unit}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </li>
+              <TypeRow
+                key={t.id}
+                type_={t}
+                brands={typeBrands}
+                activeBrand={activeBrand}
+                cycle={cycles.find((c) => c.id === t.cycle_id)}
+                expanded={expandedType === t.id}
+                onToggle={() => setExpandedType(expandedType === t.id ? null : t.id)}
+              />
             );
           })}
         </ul>

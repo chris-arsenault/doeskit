@@ -31,7 +31,7 @@ INSERT INTO supplement_types (id, name, timing, training_day_only, cycle_id, tar
   ('pre-workout',    'Pre-Workout',               'pre_workout',   true,  NULL,                 1,     'serving',      '30 min pre-training on empty stomach.',                                                 140),
   ('intra-carb',     'Intra-Workout Carbs',       'intra_workout', true,  NULL,                 1,     'serving',      'Mix in water. Sustained carb energy during training.',                                  150),
   ('intra-amino',    'Intra-Workout Aminos',      'intra_workout', true,  NULL,                 1,     'serving',      'Mix in water. Anti-catabolic signal during training, not a protein replacement.',        160),
-  ('post-protein',   'Post-Workout Protein',      'post_workout',  true,  NULL,                 28,    'g protein',    'Post-workout. If shake IS the meal, increase to ~42g.',                                 170),
+  ('post-protein',   'Post-Workout Protein',      'post_workout',  false, NULL,                 28,    'g protein',    'Post-workout or meal replacement.',                                                     170),
   ('bpc157-am',      'BPC-157 (AM)',              'morning',       false, NULL,                 1,     'serving',      'Finishing current supply then discontinuing — wait for legal injectable access.',        180),
   ('bpc157-pm',      'BPC-157 (PM)',              'evening',       false, NULL,                 1,     'serving',      'Finishing current supply then discontinuing — wait for legal injectable access.',        185)
 ON CONFLICT (id) DO UPDATE SET
