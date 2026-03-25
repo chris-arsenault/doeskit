@@ -45,6 +45,13 @@ const SupplementRow = memo(function SupplementRow({ dose, altBrands }: Props) {
             {dose.dose_label} &middot; {activeBrand.brand}
           </span>
         )}
+        {(dose.supplement_type.instructions || activeBrand.instructions) && (
+          <span className={styles.notes}>
+            {dose.supplement_type.instructions}
+            {dose.supplement_type.instructions && activeBrand.instructions && " — "}
+            {activeBrand.instructions}
+          </span>
+        )}
       </div>
     </li>
   );
