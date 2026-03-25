@@ -84,7 +84,7 @@ type DosekitStore = {
   logEnergy: (period: string, score: number) => void;
   logWorkout: (done: boolean) => void;
   logMotivation: (score: number) => void;
-  toggleSupplement: (typeId: string) => void;
+  toggleSupplement: (typeId: string, brandId?: string) => void;
   loadTypes: () => Promise<void>;
   loadBrands: () => Promise<void>;
   loadCycles: () => Promise<void>;
@@ -175,6 +175,7 @@ export const useStore = create<DosekitStore>((set, get) => ({
     try {
       const resp = await apiGet<TodayResponse>(`/today?date=${selectedDate}`);
       set(flattenResponse(resp));
+      if (get().allBrands.length === 0) get().loadBrands();
     } catch (e) {
       set({ error: (e as Error).message, initialLoading: false });
     }
@@ -208,11 +209,11 @@ export const useStore = create<DosekitStore>((set, get) => ({
     set({ workoutMotivation: score });
     postLog("/log/workout", get().selectedDate, { motivation: score }, get().refresh);
   },
-  toggleSupplement: (typeId) => {
+  toggleSupplement: (typeId, overrideBrandId) => {
     const newVal = !get().taken[typeId];
     set((s) => ({ taken: { ...s.taken, [typeId]: newVal } }));
     const dose = get().doses.find((d) => d.supplement_type.id === typeId);
-    const brandId = dose?.brand.id ?? "";
+    const brandId = overrideBrandId ?? dose?.brand.id ?? "";
     postLog(
       "/log/supplement",
       get().selectedDate,

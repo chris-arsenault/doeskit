@@ -7,6 +7,7 @@ import styles from "./SupplementsSection.module.css";
 
 export default function SupplementsSection() {
   const doses = useStore((s) => s.doses);
+  const allBrands = useStore((s) => s.allBrands);
   const isTrainingDay = useStore((s) => s.isTrainingDay);
   const workoutSkipped = useStore((s) => s.workoutDone === false);
 
@@ -21,7 +22,11 @@ export default function SupplementsSection() {
           </h2>
           <ul className={styles.checklist}>
             {items.map((dose) => (
-              <SupplementRow key={dose.supplement_type.id} dose={dose} />
+              <SupplementRow
+                key={dose.supplement_type.id}
+                dose={dose}
+                altBrands={allBrands.filter((b) => b.type_id === dose.supplement_type.id)}
+              />
             ))}
           </ul>
         </section>
