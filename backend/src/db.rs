@@ -95,26 +95,60 @@ impl PgPool {
         let client = self.connect().await?;
         let rows = client
             .query(
-                "SELECT id, type_id, brand, product_name, serving_dose::float8, serving_unit, units_per_serving::float8, unit_name, form, instructions
-                 FROM supplement_brands ORDER BY type_id, brand",
+                "SELECT sb.id, sb.type_id, sb.brand_id, b.name as brand_name, sb.product_name,
+                        sb.serving_dose::float8, sb.serving_unit, sb.units_per_serving::float8,
+                        sb.unit_name, sb.form, sb.instructions, sb.url,
+                        sb.price_per_serving::float8, sb.subscription_discount::float8, sb.in_stock
+                 FROM supplement_brands sb
+                 JOIN brands b ON b.id = sb.brand_id
+                 ORDER BY sb.type_id, b.name",
                 &[],
             )
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;
 
+        Ok(rows.iter().map(brand_from_row).collect())
+    }
+
+    pub async fn list_all_brands_table(&self) -> Result<Vec<Brand>, Error> {
+        let client = self.connect().await?;
+        let rows = client
+            .query("SELECT id, name FROM brands ORDER BY name", &[])
+            .await
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
         Ok(rows
             .iter()
-            .map(|r| SupplementBrand {
+            .map(|r| Brand {
                 id: r.get("id"),
-                type_id: r.get("type_id"),
-                brand: r.get("brand"),
-                product_name: r.get("product_name"),
-                serving_dose: r.get("serving_dose"),
-                serving_unit: r.get("serving_unit"),
-                units_per_serving: r.get("units_per_serving"),
-                unit_name: r.get("unit_name"),
-                form: r.get("form"),
-                instructions: r.get("instructions"),
+                name: r.get("name"),
+            })
+            .collect())
+    }
+
+    pub async fn list_research(&self) -> Result<Vec<BrandResearch>, Error> {
+        let client = self.connect().await?;
+        let rows = client
+            .query(
+                "SELECT br.type_id, br.brand_id, b.name as brand_name, br.not_found, br.notes, br.last_researched
+                 FROM brand_research br
+                 JOIN brands b ON b.id = br.brand_id
+                 ORDER BY br.type_id, b.name",
+                &[],
+            )
+            .await
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let d: chrono::NaiveDate = r.get("last_researched");
+                BrandResearch {
+                    type_id: r.get("type_id"),
+                    brand_id: r.get("brand_id"),
+                    brand_name: r.get("brand_name"),
+                    not_found: r.get("not_found"),
+                    notes: r.get("notes"),
+                    last_researched: d.format("%Y-%m-%d").to_string(),
+                }
             })
             .collect())
     }
@@ -420,6 +454,26 @@ impl PgPool {
 }
 
 // ── Helpers ─────────────────────────────────────────────────
+
+fn brand_from_row(r: &tokio_postgres::Row) -> SupplementBrand {
+    SupplementBrand {
+        id: r.get("id"),
+        type_id: r.get("type_id"),
+        brand_id: r.get("brand_id"),
+        brand_name: r.get("brand_name"),
+        product_name: r.get("product_name"),
+        serving_dose: r.get("serving_dose"),
+        serving_unit: r.get("serving_unit"),
+        units_per_serving: r.get("units_per_serving"),
+        unit_name: r.get("unit_name"),
+        form: r.get("form"),
+        instructions: r.get("instructions"),
+        url: r.get("url"),
+        price_per_serving: r.get("price_per_serving"),
+        subscription_discount: r.get("subscription_discount"),
+        in_stock: r.get("in_stock"),
+    }
+}
 
 // ── Error ───────────────────────────────────────────────────
 

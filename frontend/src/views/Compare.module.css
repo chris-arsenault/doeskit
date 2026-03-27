@@ -1,0 +1,90 @@
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: var(--spacing);
+}
+
+.target {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  margin-left: 8px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.cell {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.dne {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
+.noProduct {
+  opacity: 0.6;
+}
+
+.outOfStock {
+  opacity: 0.5;
+}
+
+.cellBrand {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.cellProduct {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.cellDose {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.cellPrice {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.cellDiscount {
+  color: var(--color-primary);
+  font-size: 10px;
+}
+
+.cellDne {
+  color: var(--color-danger);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.cellNote {
+  color: var(--color-text-muted);
+  font-style: italic;
+  font-size: 10px;
+}
+
+.cellLink {
+  color: var(--color-primary);
+  font-size: 10px;
+  text-decoration: none;
+}
+
+.cellLink:hover {
+  text-decoration: underline;
+}

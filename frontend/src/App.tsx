@@ -5,7 +5,8 @@ import { signIn, signOut, getSession } from "./auth";
 import Today from "./views/Today";
 import Setup from "./views/Setup";
 import History from "./views/History";
-import { Pill, Settings, CalendarDays, LogOut } from "lucide-react";
+import Compare from "./views/Compare";
+import { Pill, Settings, CalendarDays, DollarSign, LogOut } from "lucide-react";
 import styles from "./App.module.css";
 import shared from "./styles/shared.module.css";
 
@@ -143,6 +144,7 @@ function AppContent({
     <Routes>
       <Route path="/" element={<Today />} />
       <Route path="/setup" element={<Setup />} />
+      <Route path="/compare" element={<Compare />} />
       <Route path="/history" element={<History />} />
     </Routes>
   );
@@ -178,6 +180,10 @@ function AuthenticatedApp({
         <NavLink to="/history" className={styles.navItem}>
           <CalendarDays size={20} />
           <span>History</span>
+        </NavLink>
+        <NavLink to="/compare" className={styles.navItem}>
+          <DollarSign size={20} />
+          <span>Cost</span>
         </NavLink>
         <NavLink to="/setup" className={styles.navItem}>
           <Settings size={20} />

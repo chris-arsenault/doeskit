@@ -42,7 +42,7 @@ const SupplementRow = memo(function SupplementRow({ dose, altBrands }: Props) {
           />
         ) : (
           <span className={styles.dose}>
-            {dose.dose_label} &middot; {activeBrand.brand}
+            {dose.dose_label} &middot; {activeBrand.brand_name}
           </span>
         )}
         {(dose.supplement_type.instructions || activeBrand.instructions) && (
@@ -76,7 +76,7 @@ function BrandPicker({
     <div className={styles.brandPicker}>
       <button className={styles.brandToggle} onClick={onToggle}>
         <span className={styles.dose}>
-          {doseLabel} &middot; {active.brand}
+          {doseLabel} &middot; {active.brand_name}
         </span>
         <ChevronDown size={12} className={styles.chevron} />
       </button>
@@ -88,7 +88,7 @@ function BrandPicker({
               className={`${styles.brandOption} ${b.id === active.id ? styles.brandSelected : ""}`}
               onClick={() => onSelect(b)}
             >
-              {b.brand} {b.product_name}
+              {b.brand_name} {b.product_name}
             </button>
           ))}
         </div>

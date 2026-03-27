@@ -34,6 +34,7 @@ pub fn api_routes() -> Router<Arc<AppState>> {
         .route("/schedule", get(get_schedule))
         .route("/schedule", post(set_schedule))
         .route("/history", get(get_history))
+        .route("/compare", get(get_compare))
         .route("/health", get(health))
 }
 
@@ -402,6 +403,21 @@ async fn get_history(
         .collect();
 
     Ok(Json(summaries))
+}
+
+// ── Compare ─────────────────────────────────────────────────
+
+async fn get_compare(State(state): State<Arc<AppState>>) -> AppResult<CompareResponse> {
+    let types = state.db.list_types().await.map_err(db_err)?;
+    let brands = state.db.list_all_brands_table().await.map_err(db_err)?;
+    let products = state.db.list_brands().await.map_err(db_err)?;
+    let research = state.db.list_research().await.map_err(db_err)?;
+    Ok(Json(CompareResponse {
+        types,
+        brands,
+        products,
+        research,
+    }))
 }
 
 // ── Dose computation ────────────────────────────────────────

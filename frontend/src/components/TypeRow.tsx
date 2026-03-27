@@ -71,7 +71,7 @@ function TypeHeader({
         </span>
         {activeBrand && (
           <span className={shared.muted}>
-            {activeBrand.brand} {activeBrand.product_name}
+            {activeBrand.brand_name} {activeBrand.product_name}
           </span>
         )}
       </div>
@@ -138,7 +138,7 @@ function TypeControls({
               onClick={() => setActiveBrand(type_.id, b.id)}
             >
               <span className={styles.brandName}>
-                {b.brand} {b.product_name}
+                {b.brand_name} {b.product_name}
               </span>
               <span className={shared.muted}>
                 {b.units_per_serving} {b.unit_name} = {b.serving_dose} {b.serving_unit}

@@ -16,13 +16,15 @@ function makeDose(overrides: Partial<SupplementType> & { id: string }): DailyDos
   const brand: SupplementBrand = {
     id: `${overrides.id}-brand`,
     type_id: overrides.id,
-    brand: "Test",
+    brand_id: "test",
+    brand_name: "Test",
     product_name: "Test Product",
     serving_dose: 1,
     serving_unit: "serving",
     units_per_serving: 1,
     unit_name: "serving",
     form: "pill",
+    in_stock: true,
   };
   return { supplement_type: type_, brand, servings_needed: 1, dose_label: "1 serving" };
 }

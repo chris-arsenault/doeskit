@@ -1,5 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+// ── Brand identity ──────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Brand {
+    pub id: String,
+    pub name: String,
+}
+
 // ── Supplement Type (parent) ────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,13 +24,14 @@ pub struct SupplementType {
     pub sort_order: i32,
 }
 
-// ── Supplement Brand (child) ────────────────────────────────
+// ── Supplement Brand (product you own/use) ──────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SupplementBrand {
     pub id: String,
     pub type_id: String,
-    pub brand: String,
+    pub brand_id: String,
+    pub brand_name: String,
     pub product_name: String,
     pub serving_dose: f64,
     pub serving_unit: String,
@@ -30,6 +39,22 @@ pub struct SupplementBrand {
     pub unit_name: String,
     pub form: String,
     pub instructions: Option<String>,
+    pub url: Option<String>,
+    pub price_per_serving: Option<f64>,
+    pub subscription_discount: Option<f64>,
+    pub in_stock: bool,
+}
+
+// ── Brand Research (comparison data) ────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BrandResearch {
+    pub type_id: String,
+    pub brand_id: String,
+    pub brand_name: String,
+    pub not_found: bool,
+    pub notes: Option<String>,
+    pub last_researched: String,
 }
 
 // ── Computed daily dose ─────────────────────────────────────
@@ -148,4 +173,14 @@ pub struct DaySummary {
 #[derive(Debug, Deserialize)]
 pub struct HistoryQuery {
     pub days: Option<u32>,
+}
+
+// ── Compare ─────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct CompareResponse {
+    pub types: Vec<SupplementType>,
+    pub brands: Vec<Brand>,
+    pub products: Vec<SupplementBrand>,
+    pub research: Vec<BrandResearch>,
 }

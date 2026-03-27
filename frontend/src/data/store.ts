@@ -19,7 +19,8 @@ export type SupplementType = {
 export type SupplementBrand = {
   id: string;
   type_id: string;
-  brand: string;
+  brand_id: string;
+  brand_name: string;
   product_name: string;
   serving_dose: number;
   serving_unit: string;
@@ -27,6 +28,10 @@ export type SupplementBrand = {
   unit_name: string;
   form: string;
   instructions?: string;
+  url?: string;
+  price_per_serving?: number;
+  subscription_discount?: number;
+  in_stock: boolean;
 };
 
 export type DailyDose = {
