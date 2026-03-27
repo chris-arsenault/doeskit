@@ -125,22 +125,39 @@ impl PgPool {
             .collect())
     }
 
-    pub async fn update_brand_pricing(
+    pub async fn update_brand(
         &self,
         id: &str,
-        price: Option<f64>,
-        discount: Option<f64>,
-        url: Option<String>,
+        body: &crate::routes::UpdateBrandBody,
     ) -> Result<(), Error> {
         let client = self.connect().await?;
         client
             .execute(
-                "UPDATE supplement_brands
-                 SET price_per_serving = COALESCE($1::float8::numeric, price_per_serving),
-                     subscription_discount = COALESCE($2::float8::numeric, subscription_discount),
-                     url = COALESCE($3, url)
-                 WHERE id = $4",
-                &[&price, &discount, &url, &id],
+                "UPDATE supplement_brands SET
+                   product_name = COALESCE($1, product_name),
+                   serving_dose = COALESCE($2::float8::numeric, serving_dose),
+                   serving_unit = COALESCE($3, serving_unit),
+                   units_per_serving = COALESCE($4::float8::numeric, units_per_serving),
+                   unit_name = COALESCE($5, unit_name),
+                   form = COALESCE($6, form),
+                   instructions = COALESCE($7, instructions),
+                   url = COALESCE($8, url),
+                   price_per_serving = COALESCE($9::float8::numeric, price_per_serving),
+                   subscription_discount = COALESCE($10::float8::numeric, subscription_discount)
+                 WHERE id = $11",
+                &[
+                    &body.product_name,
+                    &body.serving_dose,
+                    &body.serving_unit,
+                    &body.units_per_serving,
+                    &body.unit_name,
+                    &body.form,
+                    &body.instructions,
+                    &body.url,
+                    &body.price_per_serving,
+                    &body.subscription_discount,
+                    &id,
+                ],
             )
             .await
             .map_err(|e| Error::Db(format!("{e:?}")))?;

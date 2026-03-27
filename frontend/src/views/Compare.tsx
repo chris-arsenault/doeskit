@@ -23,6 +23,7 @@ type CompareData = {
 export default function Compare() {
   const [data, setData] = useState<CompareData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<SupplementBrand | null>(null);
 
   const reload = useCallback(() => {
     apiGet<CompareData>("/compare")
@@ -31,6 +32,11 @@ export default function Compare() {
   }, []);
 
   useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const handleSave = useCallback(() => {
+    setEditing(null);
     reload();
   }, [reload]);
 
@@ -62,11 +68,14 @@ export default function Compare() {
           </thead>
           <tbody>
             {researchedTypes.map((t) => (
-              <TypeRow key={t.id} type_={t} brandCols={brandCols} data={data} onUpdate={reload} />
+              <TypeRow key={t.id} type_={t} brandCols={brandCols} data={data} onEdit={setEditing} />
             ))}
           </tbody>
         </table>
       </div>
+      {editing && (
+        <EditModal product={editing} onClose={() => setEditing(null)} onSave={handleSave} />
+      )}
     </div>
   );
 }
@@ -83,12 +92,12 @@ function TypeRow({
   type_,
   brandCols,
   data,
-  onUpdate,
+  onEdit,
 }: {
   type_: SupplementType;
   brandCols: Brand[];
   data: CompareData;
-  onUpdate: () => void;
+  onEdit: (p: SupplementBrand) => void;
 }) {
   return (
     <tr>
@@ -107,7 +116,7 @@ function TypeRow({
             research={res}
             product={product}
             target={type_.target_dose}
-            onUpdate={onUpdate}
+            onEdit={onEdit}
           />
         );
       })}
@@ -119,12 +128,12 @@ function PriceCell({
   research,
   product,
   target,
-  onUpdate,
+  onEdit,
 }: {
   research: Research | undefined;
   product: SupplementBrand | undefined;
   target: number;
-  onUpdate: () => void;
+  onEdit: (p: SupplementBrand) => void;
 }) {
   if (!research) return <td className={styles.cell} />;
   if (research.not_found) {
@@ -145,132 +154,215 @@ function PriceCell({
       </td>
     );
   }
-  return <ProductPriceCell product={product} target={target} onUpdate={onUpdate} />;
+  return <ProductCell product={product} target={target} onEdit={onEdit} />;
 }
 
-function ProductPriceCell({
-  product,
-  target,
-  onUpdate,
-}: {
-  product: SupplementBrand;
-  target: number;
-  onUpdate: () => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const handleDone = useCallback(() => {
-    setEditing(false);
-    onUpdate();
-  }, [onUpdate]);
-
-  return (
-    <td className={`${styles.cell} ${!product.in_stock ? styles.outOfStock : ""}`}>
-      {editing ? (
-        <PriceEditor product={product} onDone={handleDone} />
-      ) : (
-        <PriceDisplay product={product} target={target} onEdit={() => setEditing(true)} />
-      )}
-    </td>
-  );
-}
-
-function PriceDisplay({
+function ProductCell({
   product,
   target,
   onEdit,
 }: {
   product: SupplementBrand;
   target: number;
-  onEdit: () => void;
+  onEdit: (p: SupplementBrand) => void;
 }) {
-  const unitsPerDay =
+  const units =
     target > 0 && product.serving_dose > 0 ? Math.ceil(target / product.serving_dose) : 1;
-  const dailyCost = product.price_per_serving ? product.price_per_serving * unitsPerDay : null;
+  const daily = product.price_per_serving ? product.price_per_serving * units : null;
 
   return (
-    <>
-      <button className={styles.priceBtn} onClick={onEdit}>
-        {dailyCost != null ? (
-          <span className={styles.price}>${dailyCost.toFixed(2)}/day</span>
-        ) : (
-          <span className={styles.noPrice}>+ price</span>
-        )}
-      </button>
+    <td
+      className={`${styles.cell} ${styles.clickable} ${!product.in_stock ? styles.outOfStock : ""}`}
+      onClick={() => onEdit(product)}
+    >
+      {daily != null ? (
+        <span className={styles.price}>${daily.toFixed(2)}/day</span>
+      ) : (
+        <span className={styles.noPrice}>+ price</span>
+      )}
       <span className={styles.unitsPerDay}>
-        {unitsPerDay} {product.unit_name}
-        {unitsPerDay > 1 && !product.unit_name.endsWith("s") ? "s" : ""}/day
+        {units} {product.unit_name}
+        {units > 1 && !product.unit_name.endsWith("s") ? "s" : ""}/day
       </span>
       {product.subscription_discount && (
         <span className={styles.discount}>-{product.subscription_discount}% sub</span>
       )}
-      <ProductLink product={product} />
+      {product.url ? (
+        <a
+          href={product.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.productLink}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {product.product_name}
+        </a>
+      ) : (
+        <span className={styles.productName}>{product.product_name}</span>
+      )}
+    </td>
+  );
+}
+
+function buildPayload(f: Record<string, string>) {
+  const optStr = (v: string) => v || null;
+  const optNum = (v: string) => (v ? parseFloat(v) : null);
+  return {
+    product_name: optStr(f.product_name),
+    serving_dose: optNum(f.serving_dose),
+    serving_unit: optStr(f.serving_unit),
+    units_per_serving: optNum(f.units_per_serving),
+    unit_name: optStr(f.unit_name),
+    form: optStr(f.form),
+    instructions: optStr(f.instructions),
+    url: optStr(f.url),
+    price_per_serving: optNum(f.price_per_serving),
+    subscription_discount: optNum(f.subscription_discount),
+  };
+}
+
+function EditModal({
+  product,
+  onClose,
+  onSave,
+}: {
+  product: SupplementBrand;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [f, setF] = useState({
+    product_name: product.product_name,
+    serving_dose: product.serving_dose.toString(),
+    serving_unit: product.serving_unit,
+    units_per_serving: product.units_per_serving.toString(),
+    unit_name: product.unit_name,
+    form: product.form,
+    instructions: product.instructions ?? "",
+    url: product.url ?? "",
+    price_per_serving: product.price_per_serving?.toString() ?? "",
+    subscription_discount: product.subscription_discount?.toString() ?? "",
+  });
+
+  const set = (k: string, v: string) => setF((prev) => ({ ...prev, [k]: v }));
+
+  const save = async () => {
+    await apiPut(`/brands/${product.id}/pricing`, buildPayload(f));
+    onSave();
+  };
+
+  return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+    <div className={styles.overlay} onClick={onClose}>
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <h3 className={styles.modalTitle}>
+          {product.brand_name} — {product.product_name}
+        </h3>
+        <ModalForm f={f} set={set} />
+        <div className={styles.modalActions}>
+          <button className={styles.saveBtn} onClick={save}>
+            Save
+          </button>
+          <button className={styles.cancelBtn} onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type FormProps = { f: Record<string, string>; set: (k: string, v: string) => void };
+
+function ModalForm({ f, set }: FormProps) {
+  return (
+    <div className={styles.modalGrid}>
+      <ProductFields f={f} set={set} />
+      <PricingFields f={f} set={set} />
+    </div>
+  );
+}
+
+function ProductFields({ f, set }: FormProps) {
+  return (
+    <>
+      <label htmlFor="ed-name">Product</label>
+      <input
+        id="ed-name"
+        value={f.product_name}
+        onChange={(e) => set("product_name", e.target.value)}
+      />
+      <label htmlFor="ed-dose">Dose/unit</label>
+      <div className={styles.modalRow}>
+        <input
+          id="ed-dose"
+          type="number"
+          step="0.01"
+          value={f.serving_dose}
+          onChange={(e) => set("serving_dose", e.target.value)}
+          placeholder="dose"
+        />
+        <input
+          id="ed-unit"
+          value={f.serving_unit}
+          onChange={(e) => set("serving_unit", e.target.value)}
+          placeholder="mg, IU..."
+        />
+      </div>
+      <label htmlFor="ed-ups">Units/srv</label>
+      <div className={styles.modalRow}>
+        <input
+          id="ed-ups"
+          type="number"
+          step="1"
+          value={f.units_per_serving}
+          onChange={(e) => set("units_per_serving", e.target.value)}
+          placeholder="#"
+        />
+        <input
+          id="ed-uname"
+          value={f.unit_name}
+          onChange={(e) => set("unit_name", e.target.value)}
+          placeholder="capsule..."
+        />
+      </div>
+      <label htmlFor="ed-form">Form</label>
+      <select id="ed-form" value={f.form} onChange={(e) => set("form", e.target.value)}>
+        <option value="pill">pill</option>
+        <option value="scoop">scoop</option>
+        <option value="drops">drops</option>
+      </select>
     </>
   );
 }
 
-function ProductLink({ product }: { product: SupplementBrand }) {
-  if (product.url) {
-    return (
-      <a
-        href={product.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={styles.productLink}
-      >
-        {product.product_name}
-      </a>
-    );
-  }
-  return <span className={styles.productName}>{product.product_name}</span>;
-}
-
-function PriceEditor({ product, onDone }: { product: SupplementBrand; onDone: () => void }) {
-  const [price, setPrice] = useState(product.price_per_serving?.toString() ?? "");
-  const [discount, setDiscount] = useState(product.subscription_discount?.toString() ?? "");
-  const [url, setUrl] = useState(product.url ?? "");
-
-  const save = async () => {
-    await apiPut(`/brands/${product.id}/pricing`, {
-      price_per_serving: price ? parseFloat(price) : null,
-      subscription_discount: discount ? parseFloat(discount) : null,
-      url: url || null,
-    });
-    onDone();
-  };
-
+function PricingFields({ f, set }: FormProps) {
   return (
-    <div className={styles.editor}>
+    <>
+      <label htmlFor="ed-price">$/unit</label>
       <input
-        className={styles.editorInput}
+        id="ed-price"
         type="number"
-        step="0.01"
-        placeholder="$/unit"
-        value={price}
-        onChange={(e) => setPrice(e.target.value)}
+        step="0.001"
+        value={f.price_per_serving}
+        onChange={(e) => set("price_per_serving", e.target.value)}
       />
+      <label htmlFor="ed-disc">Sub %</label>
       <input
-        className={styles.editorInput}
+        id="ed-disc"
         type="number"
         step="1"
-        placeholder="Sub %"
-        value={discount}
-        onChange={(e) => setDiscount(e.target.value)}
+        value={f.subscription_discount}
+        onChange={(e) => set("subscription_discount", e.target.value)}
       />
+      <label htmlFor="ed-url">URL</label>
+      <input id="ed-url" type="url" value={f.url} onChange={(e) => set("url", e.target.value)} />
+      <label htmlFor="ed-notes">Notes</label>
       <input
-        className={styles.editorInput}
-        type="url"
-        placeholder="URL"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
+        id="ed-notes"
+        value={f.instructions}
+        onChange={(e) => set("instructions", e.target.value)}
       />
-      <div className={styles.editorActions}>
-        <button className={styles.editorSave} onClick={save}>
-          Save
-        </button>
-        <button className={styles.editorCancel} onClick={onDone}>
-          Cancel
-        </button>
-      </div>
-    </div>
+    </>
   );
 }

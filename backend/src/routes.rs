@@ -275,27 +275,25 @@ async fn list_brands(State(state): State<Arc<AppState>>) -> AppResult<Vec<Supple
 }
 
 #[derive(Debug, serde::Deserialize)]
-struct UpdatePricingBody {
-    price_per_serving: Option<f64>,
-    subscription_discount: Option<f64>,
-    url: Option<String>,
+pub struct UpdateBrandBody {
+    pub product_name: Option<String>,
+    pub serving_dose: Option<f64>,
+    pub serving_unit: Option<String>,
+    pub units_per_serving: Option<f64>,
+    pub unit_name: Option<String>,
+    pub form: Option<String>,
+    pub instructions: Option<String>,
+    pub url: Option<String>,
+    pub price_per_serving: Option<f64>,
+    pub subscription_discount: Option<f64>,
 }
 
 async fn update_brand_pricing(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-    Json(body): Json<UpdatePricingBody>,
+    Json(body): Json<UpdateBrandBody>,
 ) -> StatusCode {
-    match state
-        .db
-        .update_brand_pricing(
-            &id,
-            body.price_per_serving,
-            body.subscription_discount,
-            body.url,
-        )
-        .await
-    {
+    match state.db.update_brand(&id, &body).await {
         Ok(_) => StatusCode::OK,
         Err(e) => {
             tracing::error!("DB error: {e}");
