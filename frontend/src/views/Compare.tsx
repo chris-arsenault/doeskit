@@ -39,125 +39,126 @@ export default function Compare() {
   }
   if (!data) return null;
 
+  const researchedTypes = data.types.filter((t) => data.research.some((r) => r.type_id === t.id));
+  const brandCols = getBrandColumns(data.research);
+
   return (
-    <div>
-      <h1 className={styles.title}>Compare</h1>
-      {data.types
-        .filter((t) => hasResearch(t.id, data.research))
-        .map((t) => (
-          <TypeCompare key={t.id} type_={t} data={data} />
-        ))}
+    <div className={styles.container}>
+      <h1 className={styles.title}>Cost Comparison</h1>
+      <div className={styles.tableWrap}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th className={styles.suppCol}>Supplement</th>
+              {brandCols.map((b) => (
+                <th key={b.id} className={styles.brandCol}>
+                  {b.name}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {researchedTypes.map((t) => (
+              <TypeRow key={t.id} type_={t} brandCols={brandCols} data={data} />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
-function hasResearch(typeId: string, research: Research[]) {
-  return research.some((r) => r.type_id === typeId);
+function getBrandColumns(research: Research[]): Brand[] {
+  const seen = new Map<string, string>();
+  for (const r of research) {
+    if (!seen.has(r.brand_id)) seen.set(r.brand_id, r.brand_name);
+  }
+  return [...seen.entries()].map(([id, name]) => ({ id, name }));
 }
 
-function TypeCompare({ type_, data }: { type_: SupplementType; data: CompareData }) {
-  const products = data.products.filter((p) => p.type_id === type_.id);
-  const research = data.research.filter((r) => r.type_id === type_.id);
-  const allBrandIds = [...new Set(research.map((r) => r.brand_id))];
-
+function TypeRow({
+  type_,
+  brandCols,
+  data,
+}: {
+  type_: SupplementType;
+  brandCols: Brand[];
+  data: CompareData;
+}) {
   return (
-    <section className={shared.card}>
-      <h2 className={shared.cardTitle}>
-        {type_.name}
-        <span className={styles.target}>
-          {type_.target_dose} {type_.target_unit}/day
+    <tr>
+      <td className={styles.suppCell}>
+        <span className={styles.suppName}>{type_.name}</span>
+        <span className={styles.suppTarget}>
+          {type_.target_dose} {type_.target_unit}
         </span>
-      </h2>
-      <div className={styles.grid}>
-        {allBrandIds.map((brandId) => {
-          const res = research.find((r) => r.brand_id === brandId);
-          const product = products.find((p) => p.brand_id === brandId);
-          return (
-            <BrandCell
-              key={brandId}
-              brandName={res?.brand_name ?? brandId}
-              research={res ?? null}
-              product={product ?? null}
-              targetDose={type_.target_dose}
-            />
-          );
-        })}
-      </div>
-    </section>
+      </td>
+      {brandCols.map((b) => {
+        const res = data.research.find((r) => r.type_id === type_.id && r.brand_id === b.id);
+        const product = data.products.find((p) => p.type_id === type_.id && p.brand_id === b.id);
+        return <PriceCell key={b.id} research={res} product={product} target={type_.target_dose} />;
+      })}
+    </tr>
   );
 }
 
-function BrandCell({
-  brandName,
+function PriceCell({
   research,
   product,
-  targetDose,
+  target,
 }: {
-  brandName: string;
-  research: Research | null;
-  product: SupplementBrand | null;
-  targetDose: number;
+  research: Research | undefined;
+  product: SupplementBrand | undefined;
+  target: number;
 }) {
-  if (research?.not_found) {
+  if (!research) return <td className={styles.cell} />;
+
+  if (research.not_found) {
     return (
-      <div className={`${styles.cell} ${styles.dne}`}>
-        <span className={styles.cellBrand}>{brandName}</span>
-        <span className={styles.cellDne}>DNE</span>
-      </div>
+      <td className={`${styles.cell} ${styles.dne}`}>
+        <span className={styles.dneLabel}>DNE</span>
+      </td>
     );
   }
+
   if (!product) {
     return (
-      <div className={`${styles.cell} ${styles.noProduct}`}>
-        <span className={styles.cellBrand}>{brandName}</span>
-        <span className={styles.cellNote}>Researched, no product added</span>
-        {research?.notes && <span className={styles.cellNote}>{research.notes}</span>}
-      </div>
+      <td className={`${styles.cell} ${styles.noData}`}>
+        <span className={styles.noDataLabel}>—</span>
+      </td>
     );
   }
-  return <ProductCell brandName={brandName} product={product} targetDose={targetDose} />;
+
+  return <ProductPriceCell product={product} target={target} />;
 }
 
-function ProductCell({
-  brandName,
-  product,
-  targetDose,
-}: {
-  brandName: string;
-  product: SupplementBrand;
-  targetDose: number;
-}) {
-  const servingsNeeded = computeServings(targetDose, product.serving_dose);
-  const dailyCost = product.price_per_serving
-    ? (product.price_per_serving * servingsNeeded).toFixed(2)
-    : null;
+function ProductPriceCell({ product, target }: { product: SupplementBrand; target: number }) {
+  const servings =
+    target > 0 && product.serving_dose > 0 ? Math.ceil(target / product.serving_dose) : 1;
+  const daily = product.price_per_serving ? product.price_per_serving * servings : null;
 
   return (
-    <div className={`${styles.cell} ${product.in_stock ? "" : styles.outOfStock}`}>
-      <span className={styles.cellBrand}>{brandName}</span>
-      <span className={styles.cellProduct}>{product.product_name}</span>
-      <span className={styles.cellDose}>
-        {product.serving_dose} {product.serving_unit}/{product.unit_name}
-      </span>
-      {dailyCost ? (
-        <span className={styles.cellPrice}>${dailyCost}/day</span>
+    <td className={`${styles.cell} ${!product.in_stock ? styles.outOfStock : ""}`}>
+      {daily != null ? (
+        <span className={styles.price}>${daily.toFixed(2)}</span>
       ) : (
-        <span className={styles.cellNote}>Price TBD</span>
+        <span className={styles.noPrice}>—</span>
       )}
       {product.subscription_discount && (
-        <span className={styles.cellDiscount}>{product.subscription_discount}% sub</span>
+        <span className={styles.discount}>{product.subscription_discount}%</span>
       )}
-      {product.url && (
-        <a href={product.url} target="_blank" rel="noopener noreferrer" className={styles.cellLink}>
-          View
+      {product.url ? (
+        <a
+          href={product.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.productLink}
+        >
+          {product.product_name}
         </a>
+      ) : (
+        <span className={styles.productName}>{product.product_name}</span>
       )}
-      {!product.in_stock && <span className={styles.cellNote}>Out of stock</span>}
-    </div>
+    </td>
   );
-}
-
-function computeServings(target: number, perServing: number): number {
-  if (perServing <= 0) return 1;
-  return Math.ceil(target / perServing);
 }

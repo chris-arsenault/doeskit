@@ -1,90 +1,147 @@
+.container {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .title {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
-  margin-bottom: var(--spacing);
+  margin-bottom: 12px;
 }
 
-.target {
+.tableWrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 12px;
-  font-weight: 400;
-  color: var(--color-text-muted);
-  margin-left: 8px;
+  min-width: 700px;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 6px;
-}
-
-.cell {
-  background: var(--color-bg);
+.table th,
+.table td {
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 12px;
+  padding: 6px 8px;
+  vertical-align: top;
+  text-align: left;
 }
 
-.dne {
-  opacity: 0.4;
-  border-style: dashed;
+.table thead th {
+  background: var(--color-surface);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
-.noProduct {
-  opacity: 0.6;
+/* ── Columns ──────────────────────────────────────────────── */
+
+.suppCol {
+  min-width: 120px;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--color-surface);
 }
 
-.outOfStock {
-  opacity: 0.5;
+.brandCol {
+  min-width: 100px;
+  text-align: center;
 }
 
-.cellBrand {
+/* ── Supplement cell (first column) ───────────────────────── */
+
+.suppCell {
+  background: var(--color-surface);
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.suppName {
+  display: block;
   font-weight: 600;
   font-size: 13px;
 }
 
-.cellProduct {
+.suppTarget {
+  display: block;
   color: var(--color-text-muted);
-  font-size: 11px;
-  line-height: 1.2;
-}
-
-.cellDose {
-  color: var(--color-text-muted);
-  font-size: 11px;
-}
-
-.cellPrice {
-  color: var(--color-success);
-  font-weight: 600;
-}
-
-.cellDiscount {
-  color: var(--color-primary);
   font-size: 10px;
 }
 
-.cellDne {
+/* ── Price cells ──────────────────────────────────────────── */
+
+.cell {
+  text-align: center;
+}
+
+.price {
+  display: block;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--color-success);
+}
+
+.noPrice {
+  display: block;
+  color: var(--color-text-muted);
+}
+
+.discount {
+  display: block;
+  font-size: 10px;
+  color: var(--color-primary);
+}
+
+.productLink {
+  display: block;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.productLink:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+.productName {
+  display: block;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+/* ── DNE / empty states ───────────────────────────────────── */
+
+.dne {
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.dneLabel {
   color: var(--color-danger);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 11px;
 }
 
-.cellNote {
+.noData {
+  opacity: 0.4;
+}
+
+.noDataLabel {
   color: var(--color-text-muted);
-  font-style: italic;
-  font-size: 10px;
 }
 
-.cellLink {
-  color: var(--color-primary);
-  font-size: 10px;
-  text-decoration: none;
-}
-
-.cellLink:hover {
-  text-decoration: underline;
+.outOfStock {
+  opacity: 0.5;
 }
