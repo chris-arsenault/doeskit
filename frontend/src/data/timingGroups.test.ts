@@ -20,7 +20,8 @@ function makeDose(overrides: Partial<SupplementType> & { id: string }): DailyDos
     product_name: "Test Product",
     serving_dose: 1,
     serving_unit: "serving",
-    serving_size: "1 serving",
+    units_per_serving: 1,
+    unit_name: "serving",
     form: "pill",
   };
   return { supplement_type: type_, brand, servings_needed: 1, dose_label: "1 serving" };

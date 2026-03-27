@@ -141,7 +141,7 @@ function TypeControls({
                 {b.brand} {b.product_name}
               </span>
               <span className={shared.muted}>
-                {b.serving_size} = {b.serving_dose} {b.serving_unit}
+                {b.units_per_serving} {b.unit_name} = {b.serving_dose} {b.serving_unit}
               </span>
             </button>
           ))}

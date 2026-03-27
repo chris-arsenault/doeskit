@@ -23,7 +23,8 @@ export type SupplementBrand = {
   product_name: string;
   serving_dose: number;
   serving_unit: string;
-  serving_size: string;
+  units_per_serving: number;
+  unit_name: string;
   form: string;
   instructions?: string;
 };

@@ -95,7 +95,7 @@ impl PgPool {
         let client = self.connect().await?;
         let rows = client
             .query(
-                "SELECT id, type_id, brand, product_name, serving_dose::float8, serving_unit, serving_size, form, instructions
+                "SELECT id, type_id, brand, product_name, serving_dose::float8, serving_unit, units_per_serving::float8, unit_name, form, instructions
                  FROM supplement_brands ORDER BY type_id, brand",
                 &[],
             )
@@ -111,7 +111,8 @@ impl PgPool {
                 product_name: r.get("product_name"),
                 serving_dose: r.get("serving_dose"),
                 serving_unit: r.get("serving_unit"),
-                serving_size: r.get("serving_size"),
+                units_per_serving: r.get("units_per_serving"),
+                unit_name: r.get("unit_name"),
                 form: r.get("form"),
                 instructions: r.get("instructions"),
             })

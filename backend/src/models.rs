@@ -26,7 +26,8 @@ pub struct SupplementBrand {
     pub product_name: String,
     pub serving_dose: f64,
     pub serving_unit: String,
-    pub serving_size: String,
+    pub units_per_serving: f64,
+    pub unit_name: String,
     pub form: String,
     pub instructions: Option<String>,
 }

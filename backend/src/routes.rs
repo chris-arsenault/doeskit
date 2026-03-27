@@ -101,7 +101,7 @@ async fn get_today(
                 brands.iter().find(|b| b.id == *brand_id)
             }?;
             let servings = compute_servings(t.target_dose, brand.serving_dose, &brand.form);
-            let label = format_dose_label(servings, &brand.serving_size, &brand.form);
+            let label = format_dose_label(servings, brand.units_per_serving, &brand.unit_name);
             Some(DoseStatus {
                 dose: DailyDose {
                     supplement_type: t.clone(),
@@ -417,26 +417,19 @@ fn compute_servings(target: f64, per_serving: f64, form: &str) -> f64 {
     }
 }
 
-fn format_dose_label(servings: f64, serving_size: &str, form: &str) -> String {
-    let count = if servings == servings.floor() {
-        format!("{}", servings as i64)
+fn format_dose_label(servings: f64, units_per_serving: f64, unit_name: &str) -> String {
+    let total = servings * units_per_serving;
+    let count = if total == total.floor() {
+        format!("{}", total as i64)
     } else {
-        format!("{servings:.1}")
+        format!("{total:.1}")
     };
-
-    let unit = serving_size
-        .split_whitespace()
-        .skip(1)
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    let unit_plural = if servings > 1.0 && !unit.ends_with('s') && form != "drops" {
-        format!("{unit}s")
+    let unit = if total > 1.0 && !unit_name.ends_with('s') {
+        format!("{unit_name}s")
     } else {
-        unit
+        unit_name.to_string()
     };
-
-    format!("{count} {unit_plural}")
+    format!("{count} {unit}")
 }
 
 // ── Training schedule logic ─────────────────────────────────
@@ -515,34 +508,42 @@ mod tests {
         assert_eq!(compute_servings(100.0, 0.0, "pill"), 1.0);
     }
 
-    // ── format_dose_label ───────────────────────────────────
+    // ── format_dose_label(servings, units_per_serving, unit_name) ──
 
     #[test]
     fn test_format_dose_label_single_capsule() {
-        assert_eq!(format_dose_label(1.0, "1 capsule", "pill"), "1 capsule");
+        // 1 serving × 1 capsule/serving = 1 capsule
+        assert_eq!(format_dose_label(1.0, 1.0, "capsule"), "1 capsule");
     }
 
     #[test]
-    fn test_format_dose_label_multiple_capsules_pluralizes() {
-        assert_eq!(format_dose_label(2.0, "1 capsule", "pill"), "2 capsules");
+    fn test_format_dose_label_multiple_capsules() {
+        // 2 servings × 1 capsule/serving = 2 capsules
+        assert_eq!(format_dose_label(2.0, 1.0, "capsule"), "2 capsules");
     }
 
     #[test]
     fn test_format_dose_label_scoop_fractional() {
-        assert_eq!(format_dose_label(1.5, "1 scoop", "scoop"), "1.5 scoops");
+        // 1.5 servings × 1 scoop/serving = 1.5 scoops
+        assert_eq!(format_dose_label(1.5, 1.0, "scoop"), "1.5 scoops");
     }
 
     #[test]
-    fn test_format_dose_label_drops_no_pluralize() {
-        assert_eq!(format_dose_label(8.0, "1 drop", "drops"), "8 drop");
+    fn test_format_dose_label_multi_unit_serving() {
+        // 1.5 servings × 2 scoops/serving = 3 scoops (plant protein)
+        assert_eq!(format_dose_label(1.5, 2.0, "scoop"), "3 scoops");
     }
 
     #[test]
-    fn test_format_dose_label_complex_serving_size() {
-        assert_eq!(
-            format_dose_label(1.0, "1 scoop (7.7g)", "scoop"),
-            "1 scoop (7.7g)"
-        );
+    fn test_format_dose_label_drops() {
+        // 8 servings × 1 drop/serving = 8 drops
+        assert_eq!(format_dose_label(8.0, 1.0, "drop"), "8 drops");
+    }
+
+    #[test]
+    fn test_format_dose_label_half_scoop_multi() {
+        // 3.5 servings × 1 scoop/serving = 3.5 scoops
+        assert_eq!(format_dose_label(3.5, 1.0, "scoop"), "3.5 scoops");
     }
 
     // ── check_training_day ──────────────────────────────────
