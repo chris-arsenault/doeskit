@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, useCallback, type FormEvent } from "react";
 import { useStore, type SupplementType, type SupplementBrand, type Cycle } from "../data/store";
 import { apiPost, apiDelete } from "../data/api";
 import TypeRow from "../components/TypeRow";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Download } from "lucide-react";
 import shared from "../styles/shared.module.css";
 import styles from "./Setup.module.css";
 
@@ -25,9 +25,41 @@ export default function Setup() {
     loadSchedule();
   }, [loadTypes, loadBrands, loadCycles, loadSchedule]);
 
+  const exportStack = useCallback(() => {
+    const activeSelections = useStore.getState().activeSelections;
+    const data = types.map((t) => ({
+      id: t.id,
+      name: t.name,
+      timing: t.timing,
+      training_day_only: t.training_day_only,
+      active: t.active,
+      target_dose: t.target_dose,
+      target_unit: t.target_unit,
+      instructions: t.instructions,
+      cycle: cycles.find((c) => c.id === t.cycle_id) ?? null,
+      active_brand_id: activeSelections[t.id] ?? null,
+      brands: brands
+        .filter((b) => b.type_id === t.id)
+        .map((b) => ({ ...b, is_active: b.id === activeSelections[t.id] })),
+    }));
+    const json = JSON.stringify({ schedule, supplements: data }, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dosekit-stack-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [types, brands, cycles, schedule]);
+
   return (
     <div>
-      <h1 className={styles.title}>Setup</h1>
+      <div className={styles.titleRow}>
+        <h1 className={styles.title}>Setup</h1>
+        <button className={styles.exportBtn} onClick={exportStack} title="Export stack as JSON">
+          <Download size={16} />
+        </button>
+      </div>
       <ScheduleSection schedule={schedule} onChanged={loadSchedule} />
       <CyclesSection cycles={cycles} onChanged={loadCycles} />
       <TypesSection types={types} brands={brands} cycles={cycles} />
