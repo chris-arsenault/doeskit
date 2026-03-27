@@ -125,6 +125,28 @@ impl PgPool {
             .collect())
     }
 
+    pub async fn update_brand_pricing(
+        &self,
+        id: &str,
+        price: Option<f64>,
+        discount: Option<f64>,
+        url: Option<String>,
+    ) -> Result<(), Error> {
+        let client = self.connect().await?;
+        client
+            .execute(
+                "UPDATE supplement_brands
+                 SET price_per_serving = COALESCE($1, price_per_serving),
+                     subscription_discount = COALESCE($2, subscription_discount),
+                     url = COALESCE($3, url)
+                 WHERE id = $4",
+                &[&price, &discount, &url, &id],
+            )
+            .await
+            .map_err(|e| Error::Db(format!("{e:?}")))?;
+        Ok(())
+    }
+
     pub async fn list_research(&self) -> Result<Vec<BrandResearch>, Error> {
         let client = self.connect().await?;
         let rows = client

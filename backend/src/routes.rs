@@ -35,6 +35,7 @@ pub fn api_routes() -> Router<Arc<AppState>> {
         .route("/schedule", post(set_schedule))
         .route("/history", get(get_history))
         .route("/compare", get(get_compare))
+        .route("/brands/{id}/pricing", put(update_brand_pricing))
         .route("/health", get(health))
 }
 
@@ -271,6 +272,36 @@ async fn update_type(
 
 async fn list_brands(State(state): State<Arc<AppState>>) -> AppResult<Vec<SupplementBrand>> {
     state.db.list_brands().await.map(Json).map_err(db_err)
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct UpdatePricingBody {
+    price_per_serving: Option<f64>,
+    subscription_discount: Option<f64>,
+    url: Option<String>,
+}
+
+async fn update_brand_pricing(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<UpdatePricingBody>,
+) -> StatusCode {
+    match state
+        .db
+        .update_brand_pricing(
+            &id,
+            body.price_per_serving,
+            body.subscription_discount,
+            body.url,
+        )
+        .await
+    {
+        Ok(_) => StatusCode::OK,
+        Err(e) => {
+            tracing::error!("DB error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
 }
 
 async fn get_selections(

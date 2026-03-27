@@ -145,3 +145,68 @@
 .outOfStock {
   opacity: 0.5;
 }
+
+/* ── Click to edit ────────────────────────────────────────── */
+
+.priceBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: block;
+  width: 100%;
+}
+
+.priceBtn:hover .price {
+  text-decoration: underline;
+}
+
+.priceBtn:hover .noPrice {
+  color: var(--color-primary);
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.editorInput {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  color: var(--color-text);
+  font-size: 11px;
+  padding: 2px 4px;
+  width: 100%;
+}
+
+.editorInput:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.editorActions {
+  display: flex;
+  gap: 4px;
+}
+
+.editorSave,
+.editorCancel {
+  flex: 1;
+  border: none;
+  border-radius: 3px;
+  font-size: 10px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.editorSave {
+  background: var(--color-success);
+  color: white;
+}
+
+.editorCancel {
+  background: var(--color-border);
+  color: var(--color-text-muted);
+}
