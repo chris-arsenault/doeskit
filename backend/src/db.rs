@@ -136,8 +136,8 @@ impl PgPool {
         client
             .execute(
                 "UPDATE supplement_brands
-                 SET price_per_serving = COALESCE($1, price_per_serving),
-                     subscription_discount = COALESCE($2, subscription_discount),
+                 SET price_per_serving = COALESCE($1::float8::numeric, price_per_serving),
+                     subscription_discount = COALESCE($2::float8::numeric, subscription_discount),
                      url = COALESCE($3, url)
                  WHERE id = $4",
                 &[&price, &discount, &url, &id],
