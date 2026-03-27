@@ -137,7 +137,11 @@ function PriceCell({
   if (!product) {
     return (
       <td className={`${styles.cell} ${styles.noData}`}>
-        <span className={styles.noDataLabel}>—</span>
+        {research.notes ? (
+          <span className={styles.researchNote}>{research.notes}</span>
+        ) : (
+          <span className={styles.noDataLabel}>No product data</span>
+        )}
       </td>
     );
   }
@@ -179,21 +183,25 @@ function PriceDisplay({
   target: number;
   onEdit: () => void;
 }) {
-  const servings =
+  const unitsPerDay =
     target > 0 && product.serving_dose > 0 ? Math.ceil(target / product.serving_dose) : 1;
-  const daily = product.price_per_serving ? product.price_per_serving * servings : null;
+  const dailyCost = product.price_per_serving ? product.price_per_serving * unitsPerDay : null;
 
   return (
     <>
       <button className={styles.priceBtn} onClick={onEdit}>
-        {daily != null ? (
-          <span className={styles.price}>${daily.toFixed(2)}</span>
+        {dailyCost != null ? (
+          <span className={styles.price}>${dailyCost.toFixed(2)}/day</span>
         ) : (
           <span className={styles.noPrice}>+ price</span>
         )}
       </button>
+      <span className={styles.unitsPerDay}>
+        {unitsPerDay} {product.unit_name}
+        {unitsPerDay > 1 && !product.unit_name.endsWith("s") ? "s" : ""}/day
+      </span>
       {product.subscription_discount && (
-        <span className={styles.discount}>{product.subscription_discount}%</span>
+        <span className={styles.discount}>-{product.subscription_discount}% sub</span>
       )}
       <ProductLink product={product} />
     </>
@@ -236,7 +244,7 @@ function PriceEditor({ product, onDone }: { product: SupplementBrand; onDone: ()
         className={styles.editorInput}
         type="number"
         step="0.01"
-        placeholder="$/serving"
+        placeholder="$/unit"
         value={price}
         onChange={(e) => setPrice(e.target.value)}
       />
