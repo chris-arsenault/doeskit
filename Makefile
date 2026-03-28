@@ -37,7 +37,7 @@ test:
 
 build:
 	cd frontend && pnpm run build
-	cd backend && cargo lambda build --release --arm64 --output-format zip
+	cd backend && cargo lambda build --release --output-format zip
 
 # ── Deploy ───────────────────────────────────────────────────
 

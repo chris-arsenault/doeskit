@@ -111,7 +111,7 @@ resource "aws_lambda_function" "api" {
   role             = aws_iam_role.lambda.arn
   handler          = "bootstrap"
   runtime          = "provided.al2023"
-  architectures    = ["arm64"]
+  architectures    = ["x86_64"]
   filename         = "${path.root}/../../backend/target/lambda/bootstrap/bootstrap.zip"
   source_code_hash = filebase64sha256("${path.root}/../../backend/target/lambda/bootstrap/bootstrap.zip")
   timeout          = 30

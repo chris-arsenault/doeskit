@@ -7,10 +7,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-concurrency:
-  group: dosekit-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   id-token: write
   contents: read
@@ -20,8 +16,11 @@ env:
   CARGO_HOME: /home/runner/.cargo
 
 jobs:
-  lint:
+  ci:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.ref == 'refs/heads/main' && 'dosekit-deploy' || format('dosekit-{0}', github.ref) }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v4
@@ -32,6 +31,10 @@ jobs:
 
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@10.29.3 --activate
+
+      - name: Rust version key
+        id: rust
+        run: echo "cachekey=$(rustc --version | sha256sum | head -c12)" >> "$GITHUB_OUTPUT"
 
       - name: Cache pnpm store
         uses: actions/cache@v4
@@ -47,8 +50,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             backend/target
-          key: rust-lint-${{ hashFiles('backend/Cargo.lock') }}
-          restore-keys: rust-lint-
+          key: rust-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: rust-${{ steps.rust.outputs.cachekey }}-
 
       - name: Install frontend deps
         working-directory: frontend
@@ -77,68 +80,32 @@ jobs:
       - name: Terraform fmt
         run: terraform fmt -check -recursive infrastructure/terraform/
 
-  deploy:
-    if: github.ref == 'refs/heads/main'
-    needs: [lint]
-    runs-on: ubuntu-latest
-    concurrency:
-      group: dosekit-deploy
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-
-      - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@10.29.3 --activate
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/share/pnpm/store/v10
-          key: pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
-          restore-keys: pnpm-
-
-      - name: Cache Rust
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            backend/target
-          key: rust-deploy-${{ hashFiles('backend/Cargo.lock') }}
-          restore-keys: rust-deploy-
-
-      - name: Cache cargo-lambda
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/lib/python*/dist-packages/cargo_lambda*
-          key: cargo-lambda-${{ runner.os }}
-
+      # Deploy (main only)
       - name: Install cargo-lambda
+        if: github.ref == 'refs/heads/main'
         run: pip3 install cargo-lambda
 
       - uses: aws-actions/configure-aws-credentials@v5
+        if: github.ref == 'refs/heads/main'
         with:
           role-to-assume: ${{ secrets.OIDC_ROLE }}
           role-session-name: GitHubActions-${{ github.run_id }}
           aws-region: us-east-1
 
       - uses: chris-arsenault/platform/.github/actions/run-migrations@main
+        if: github.ref == 'refs/heads/main'
         with:
           project: dosekit
 
       - name: Deploy
+        if: github.ref == 'refs/heads/main'
         env:
           STATE_BUCKET: ${{ secrets.STATE_BUCKET }}
         run: bash scripts/deploy.sh
 
   report:
     if: always()
-    needs: [lint, deploy]
+    needs: [ci]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -149,5 +116,5 @@ jobs:
           aws-region: us-east-1
       - uses: chris-arsenault/platform/.github/actions/report-build@main
         with:
-          status: ${{ (needs.deploy.result == 'success' && 'success') || (needs.lint.result == 'failure' && 'failure') || needs.deploy.result }}
-          lint-passed: ${{ needs.lint.result == 'success' }}
+          status: ${{ needs.ci.result }}
+          lint-passed: ${{ needs.ci.result == 'success' }}
