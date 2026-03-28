@@ -159,28 +159,7 @@ locals {
   cognito_jwks    = "${local.cognito_issuer}/.well-known/jwks.json"
 }
 
-# CORS preflight — OPTIONS must pass without auth
-resource "aws_lb_listener_rule" "api_cors" {
-  listener_arn = nonsensitive(data.aws_ssm_parameter.alb_listener_arn.value)
-  priority     = 200
-
-  condition {
-    host_header {
-      values = [local.api_domain]
-    }
-  }
-
-  condition {
-    http_request_method {
-      values = ["OPTIONS"]
-    }
-  }
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.api.arn
-  }
-}
+# CORS preflight (OPTIONS) handled platform-wide by platform-network.
 
 # All other methods — JWT validation + forward
 resource "aws_lb_listener_rule" "api" {
