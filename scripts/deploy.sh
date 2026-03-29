@@ -72,4 +72,3 @@ terraform -chdir="${TF_DIR}" apply -auto-approve
 
 echo ""
 echo "==> Deployment complete!"
-terraform -chdir="${TF_DIR}" output
