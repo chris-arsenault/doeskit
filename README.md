@@ -19,7 +19,7 @@ Supplement and health tracking app built for zero-friction daily use. Track supp
 | Backend | Rust (axum + lambda_http) |
 | Storage | DynamoDB (single-table design) |
 | Auth | AWS Cognito (JWT) |
-| Hosting | S3 + CloudFront (frontend), API Gateway + Lambda on Graviton (backend) |
+| Hosting | S3 + CloudFront (frontend), API Gateway + Lambda (backend) |
 | IaC | Terraform |
 
 ## Prerequisites
@@ -54,7 +54,7 @@ make format
 ./scripts/deploy.sh
 ```
 
-This builds the Rust Lambda (arm64), builds the React frontend, and runs `terraform apply` to deploy to AWS.
+This builds the Rust Lambda, builds the React frontend, and runs `terraform apply` to deploy to AWS.
 
 ## Project Structure
 
@@ -84,7 +84,7 @@ infrastructure/         Terraform
     modules/spa-website/ S3 + CloudFront + ACM + WAF
 
 scripts/
-  build-lambda.sh       Build Rust for Lambda (arm64)
+  build-lambda.sh       Build Rust for Lambda
   deploy.sh             Full build + deploy pipeline
 ```
 

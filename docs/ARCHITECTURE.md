@@ -21,7 +21,6 @@ User (PWA) ──── HTTPS ────► API Gateway v2 (HTTP)
                              │
                          ┌───▼───┐
                          │Lambda │  ← Rust (axum + lambda_http)
-                         │(arm64)│
                          └───┬───┘
                              │
                          ┌───▼────┐
@@ -57,7 +56,7 @@ The frontend is a mobile-first SPA designed around a 480px max-width layout with
 
 **Rust (axum 0.8 + lambda_http 0.14)**
 
-The backend is a single Lambda function running on Graviton (arm64) behind API Gateway v2. It uses axum's router, which is compatible with `lambda_http::run()` for Lambda and `axum::serve()` for local development.
+The backend is a single Lambda function behind API Gateway v2. It uses axum's router, which is compatible with `lambda_http::run()` for Lambda and `axum::serve()` for local development.
 
 ### API Design
 
@@ -114,7 +113,7 @@ Supplement and cycle records store the full JSON in a `data` attribute for flexi
 ### Modules
 
 **`api-http`** — Creates:
-- Lambda function (Rust custom runtime, arm64)
+- Lambda function (Rust custom runtime, x86_64)
 - IAM role with DynamoDB permissions
 - API Gateway v2 (HTTP) with CORS and JWT authorizer
 - Custom domain (`api.dosekit.ahara.io`) with ACM cert and Route 53
@@ -136,6 +135,6 @@ Authentication uses a shared Cognito user pool managed in the platform infrastru
 
 The deploy pipeline (`scripts/deploy.sh`):
 
-1. `cargo lambda build --release --arm64 --output-format zip` — Cross-compiles Rust to a Lambda-compatible arm64 binary
+1. `cargo lambda build --release --output-format zip` — Builds the Rust Lambda binary
 2. `npm ci && npm run build` — Builds the React SPA
 3. `terraform init && terraform apply` — Deploys infrastructure, uploads assets, invalidates CloudFront cache
