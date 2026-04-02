@@ -24,8 +24,11 @@ data "aws_ssm_parameter" "vpc_id" {
   name = "/platform/network/vpc-id"
 }
 
-data "aws_ssm_parameter" "private_subnet_ids" {
-  name = "/platform/network/private-subnet-ids"
+data "aws_subnets" "private" {
+  filter {
+    name   = "tag:subnet:access"
+    values = ["private"]
+  }
 }
 
 data "aws_ssm_parameter" "rds_address" {
@@ -118,7 +121,7 @@ resource "aws_lambda_function" "api" {
   memory_size      = 256
 
   vpc_config {
-    subnet_ids         = split(",", nonsensitive(data.aws_ssm_parameter.private_subnet_ids.value))
+    subnet_ids         = data.aws_subnets.private.ids
     security_group_ids = [aws_security_group.lambda.id]
   }
 
