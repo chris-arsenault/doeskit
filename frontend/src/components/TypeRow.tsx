@@ -21,7 +21,15 @@ type Props = {
   onToggle: () => void;
 };
 
-export default function TypeRow({ type_, brands, activeBrand, hasSelection, cycle, expanded, onToggle }: Props) {
+export default function TypeRow({
+  type_,
+  brands,
+  activeBrand,
+  hasSelection,
+  cycle,
+  expanded,
+  onToggle,
+}: Props) {
   const setActiveBrand = useStore((s) => s.setActiveBrand);
   const updateType = useStore((s) => s.updateType);
 
@@ -91,7 +99,14 @@ type ControlsProps = {
   setActiveBrand: (typeId: string, brandId: string) => Promise<void>;
 };
 
-function TypeControls({ type_, brands, activeBrand, hasSelection, updateType, setActiveBrand }: ControlsProps) {
+function TypeControls({
+  type_,
+  brands,
+  activeBrand,
+  hasSelection,
+  updateType,
+  setActiveBrand,
+}: ControlsProps) {
   return (
     <div className={styles.typeControls}>
       <div className={styles.controlRow}>
