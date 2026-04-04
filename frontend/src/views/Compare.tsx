@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { apiGet, apiPut } from "../data/api";
+import { getBrandColumns, buildPayload } from "../data/helpers";
 import type { SupplementType, SupplementBrand } from "../data/store";
 import shared from "../styles/shared.module.css";
 import styles from "./Compare.module.css";
@@ -78,14 +79,6 @@ export default function Compare() {
       )}
     </div>
   );
-}
-
-function getBrandColumns(research: Research[]): Brand[] {
-  const seen = new Map<string, string>();
-  for (const r of research) {
-    if (!seen.has(r.brand_id)) seen.set(r.brand_id, r.brand_name);
-  }
-  return [...seen.entries()].map(([id, name]) => ({ id, name }));
 }
 
 function TypeRow({
@@ -202,23 +195,6 @@ function ProductCell({
       )}
     </td>
   );
-}
-
-function buildPayload(f: Record<string, string>) {
-  const optStr = (v: string) => v || null;
-  const optNum = (v: string) => (v ? parseFloat(v) : null);
-  return {
-    product_name: optStr(f.product_name),
-    serving_dose: optNum(f.serving_dose),
-    serving_unit: optStr(f.serving_unit),
-    units_per_serving: optNum(f.units_per_serving),
-    unit_name: optStr(f.unit_name),
-    form: optStr(f.form),
-    instructions: optStr(f.instructions),
-    url: optStr(f.url),
-    price_per_serving: optNum(f.price_per_serving),
-    subscription_discount: optNum(f.subscription_discount),
-  };
 }
 
 function EditModal({

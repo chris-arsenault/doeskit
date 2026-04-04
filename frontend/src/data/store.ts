@@ -131,7 +131,7 @@ function effectiveDate(): string {
   return now.toLocaleDateString("en-CA");
 }
 
-function offsetDate(dateStr: string, days: number): string {
+export function offsetDate(dateStr: string, days: number): string {
   const d = new Date(dateStr + "T12:00:00");
   d.setDate(d.getDate() + days);
   return d.toLocaleDateString("en-CA");
@@ -147,7 +147,7 @@ function navigateTo(current: string, offset: number): string | null {
   return next > today ? null : next;
 }
 
-function flattenResponse(resp: TodayResponse) {
+export function flattenResponse(resp: TodayResponse) {
   const taken: Record<string, boolean> = {};
   for (const d of resp.doses) {
     taken[d.dose.supplement_type.id] = d.taken;

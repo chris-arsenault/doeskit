@@ -7,6 +7,7 @@ import Setup from "./views/Setup";
 import History from "./views/History";
 import Compare from "./views/Compare";
 import { Pill, Settings, CalendarDays, DollarSign, LogOut } from "lucide-react";
+import { displayName } from "./data/helpers";
 import styles from "./App.module.css";
 import shared from "./styles/shared.module.css";
 
@@ -15,15 +16,6 @@ type AuthState = {
   token: string;
   username: string;
 };
-
-function displayName(payload: Record<string, unknown>): string {
-  return (
-    (typeof payload.name === "string" && payload.name) ||
-    (typeof payload.email === "string" && payload.email) ||
-    (typeof payload["cognito:username"] === "string" && payload["cognito:username"]) ||
-    ""
-  );
-}
 
 export default function App() {
   const [auth, setAuth] = useState<AuthState>({ status: "loading", token: "", username: "" });
