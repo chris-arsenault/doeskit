@@ -71,6 +71,10 @@ jobs:
         working-directory: frontend
         run: pnpm exec prettier --check .
 
+      - name: Test frontend
+        working-directory: frontend
+        run: pnpm exec vitest run --coverage
+
       - name: Clippy
         working-directory: backend
         run: cargo clippy -- -D warnings
@@ -95,6 +99,7 @@ jobs:
           project-key: dosekit
           sources: backend/src,frontend/src,infrastructure/terraform
           exclusions: "**/target/**,**/node_modules/**,**/dist/**,**/.terraform/**"
+          extra-args: -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info
 
       # Deploy (main only)
       - name: Install cargo-lambda
