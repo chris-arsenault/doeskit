@@ -1,4 +1,6 @@
-.PHONY: lint lint-fix format format-check typecheck test build deploy
+.PHONY: ci lint lint-fix format format-check typecheck test build deploy
+
+ci: lint format-check typecheck test
 
 # ── Lint ─────────────────────────────────────────────────────
 

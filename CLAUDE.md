@@ -106,3 +106,7 @@ Builds Lambda + frontend, runs `db-migrate`, then `terraform apply`.
 - Ashwagandha cycle start_date (2026-01-26) is set so that 3/23/2026 is the first day of an off-period.
 - Seeding is done via `db-seed` (platform CLI), not an API endpoint.
 - Dosekit must be registered in platform-services `migration_projects` before first `db-migrate`.
+
+## Pre-commit CI check
+
+**Run `make ci` before committing any change.** This runs the same lint, format, typecheck, and test steps as GitHub Actions. Do not commit if it fails.
