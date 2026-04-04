@@ -104,6 +104,23 @@ type DosekitStore = {
   ) => Promise<void>;
 };
 
+/** Returns type_id -> brand_id for active types that have exactly one brand and no selection. */
+export function findMissingAutoSelections(
+  types: SupplementType[],
+  brands: SupplementBrand[],
+  selections: Record<string, string>
+): Array<{ typeId: string; brandId: string }> {
+  const result: Array<{ typeId: string; brandId: string }> = [];
+  for (const t of types) {
+    if (!t.active || selections[t.id]) continue;
+    const typeBrands = brands.filter((b) => b.type_id === t.id);
+    if (typeBrands.length === 1) {
+      result.push({ typeId: t.id, brandId: typeBrands[0].id });
+    }
+  }
+  return result;
+}
+
 const LATE_NIGHT_CUTOFF_HOUR = 3;
 
 function effectiveDate(): string {
@@ -170,6 +187,21 @@ const INITIAL_STATE = {
   schedule: { days: [] } as TrainingSchedule,
 };
 
+async function fetchBrandsAndAutoSelect(
+  types: SupplementType[]
+): Promise<{ allBrands: SupplementBrand[]; activeSelections: Record<string, string> }> {
+  const [allBrands, activeSelections] = await Promise.all([
+    apiGet<SupplementBrand[]>("/brands"),
+    apiGet<Record<string, string>>("/selections"),
+  ]);
+  const missing = findMissingAutoSelections(types, allBrands, activeSelections);
+  for (const { typeId, brandId } of missing) {
+    await apiPut(`/brands/${typeId}/active/${brandId}`);
+    activeSelections[typeId] = brandId;
+  }
+  return { allBrands, activeSelections };
+}
+
 export const useStore = create<DosekitStore>((set, get) => ({
   ...INITIAL_STATE,
   selectedDate: effectiveDate(),
@@ -229,13 +261,7 @@ export const useStore = create<DosekitStore>((set, get) => ({
   },
 
   loadTypes: async () => set({ allTypes: await apiGet("/types") }),
-  loadBrands: async () => {
-    const [allBrands, activeSelections] = await Promise.all([
-      apiGet<SupplementBrand[]>("/brands"),
-      apiGet<Record<string, string>>("/selections"),
-    ]);
-    set({ allBrands, activeSelections });
-  },
+  loadBrands: async () => set(await fetchBrandsAndAutoSelect(get().allTypes)),
   loadCycles: async () => set({ cycles: await apiGet("/cycles") }),
   loadSchedule: async () => set({ schedule: await apiGet("/schedule") }),
   setActiveBrand: async (typeId, brandId) => {

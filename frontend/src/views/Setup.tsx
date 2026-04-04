@@ -129,6 +129,7 @@ function TypesSection({
                 type_={t}
                 brands={typeBrands}
                 activeBrand={activeBrand}
+                hasSelection={!!abId}
                 cycle={cycles.find((c) => c.id === t.cycle_id)}
                 expanded={expandedType === t.id}
                 onToggle={() => setExpandedType(expandedType === t.id ? null : t.id)}
