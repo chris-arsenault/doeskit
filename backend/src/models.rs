@@ -178,13 +178,6 @@ pub struct HistoryQuery {
 // ── Push notifications ─────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PushSubscription {
-    pub endpoint: String,
-    pub p256dh: String,
-    pub auth: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationSettings {
     pub enabled: bool,
     pub morning_doses: String,

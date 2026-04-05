@@ -4,9 +4,7 @@ import { apiPost, apiDelete } from "../data/api";
 import {
   getNotificationSettings,
   updateNotificationSettings,
-  subscribeToPush,
-  unsubscribeFromPush,
-  isPushSubscribed,
+  requestNotificationPermission,
   type NotificationSettings,
 } from "../data/notifications";
 import TypeRow from "../components/TypeRow";
@@ -78,13 +76,11 @@ export default function Setup() {
 
 function NotificationsSection() {
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
-  const [subscribed, setSubscribed] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([getNotificationSettings(), isPushSubscribed()]).then(([s, sub]) => {
+    getNotificationSettings().then((s) => {
       setSettings(s);
-      setSubscribed(sub);
       setLoading(false);
     });
   }, []);
@@ -93,12 +89,8 @@ function NotificationsSection() {
 
   const toggle = async () => {
     if (!settings.enabled) {
-      const ok = await subscribeToPush();
+      const ok = await requestNotificationPermission();
       if (!ok) return;
-      setSubscribed(true);
-    } else if (subscribed) {
-      await unsubscribeFromPush();
-      setSubscribed(false);
     }
     const next = { ...settings, enabled: !settings.enabled };
     await updateNotificationSettings(next);

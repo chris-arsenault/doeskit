@@ -1,6 +1,5 @@
 mod db;
 mod models;
-mod notifications;
 mod routes;
 
 use axum::Router;

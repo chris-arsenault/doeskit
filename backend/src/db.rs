@@ -416,50 +416,6 @@ impl PgPool {
             .collect())
     }
 
-    // ── Push subscriptions ──────────────────────────────────
-
-    pub async fn add_push_subscription(&self, sub: &PushSubscription) -> Result<(), Error> {
-        let client = self.connect().await?;
-        client
-            .execute(
-                "INSERT INTO push_subscriptions (id, endpoint, p256dh, auth)
-                 VALUES (gen_random_uuid()::text, $1, $2, $3)
-                 ON CONFLICT (endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth",
-                &[&sub.endpoint, &sub.p256dh, &sub.auth],
-            )
-            .await
-            .map_err(|e| Error::Db(format!("{e:?}")))?;
-        Ok(())
-    }
-
-    pub async fn list_push_subscriptions(&self) -> Result<Vec<PushSubscription>, Error> {
-        let client = self.connect().await?;
-        let rows = client
-            .query("SELECT endpoint, p256dh, auth FROM push_subscriptions", &[])
-            .await
-            .map_err(|e| Error::Db(format!("{e:?}")))?;
-        Ok(rows
-            .iter()
-            .map(|r| PushSubscription {
-                endpoint: r.get("endpoint"),
-                p256dh: r.get("p256dh"),
-                auth: r.get("auth"),
-            })
-            .collect())
-    }
-
-    pub async fn delete_push_subscription(&self, endpoint: &str) -> Result<(), Error> {
-        let client = self.connect().await?;
-        client
-            .execute(
-                "DELETE FROM push_subscriptions WHERE endpoint = $1",
-                &[&endpoint],
-            )
-            .await
-            .map_err(|e| Error::Db(format!("{e:?}")))?;
-        Ok(())
-    }
-
     // ── Supplement logs ────────────────────────────────────
 
     pub async fn get_supplement_logs(&self, date: &str) -> Result<Vec<SupplementLog>, Error> {

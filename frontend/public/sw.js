@@ -182,21 +182,13 @@ async function flushQueue() {
   }
 }
 
-// ── Push notifications ─────────────────────────────────────
+// ── Local notifications (client-side, no server push) ──────
 
-self.addEventListener("push", (event) => {
-  if (!event.data) return;
-  const payload = event.data.json();
-  const options = {
-    body: payload.body,
-    icon: payload.icon || "/icon-192.png",
-    badge: "/icon-192.png",
-    tag: payload.tag,
-    renotify: true,
-    actions: payload.actions || [],
-    data: payload.data || {},
-  };
-  event.waitUntil(self.registration.showNotification(payload.title, options));
+// Check notifications when the app sends settings, or on periodic sync
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "CHECK_NOTIFICATIONS") {
+    checkNotifications(event.data.settings, event.data.today);
+  }
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -205,80 +197,105 @@ self.addEventListener("notificationclick", (event) => {
   const data = event.notification.data || {};
 
   // Energy quick-reply: Low=3, Good=7
-  if (action.startsWith("energy_") && action.endsWith("_low")) {
-    const period = data.period;
-    event.waitUntil(postEnergyScore(period, 3));
-    return;
-  }
-  if (action.startsWith("energy_") && action.endsWith("_good")) {
-    const period = data.period;
-    event.waitUntil(postEnergyScore(period, 7));
+  if (action === "energy_low" || action === "energy_good") {
+    const score = action === "energy_low" ? 3 : 7;
+    event.waitUntil(logFromNotification(data, score));
     return;
   }
 
   // Default: open the app
-  const url = data.url || "/";
   event.waitUntil(
     self.clients.matchAll({ type: "window" }).then((windowClients) => {
       for (const client of windowClients) {
-        if (client.url.includes(url) && "focus" in client) {
-          return client.focus();
-        }
+        if ("focus" in client) return client.focus();
       }
-      return self.clients.openWindow(url);
+      return self.clients.openWindow("/");
     })
   );
 });
 
-async function postEnergyScore(period, score) {
-  const today = effectiveToday();
-  try {
-    // Get auth token from an open client
-    const clients = await self.clients.matchAll({ type: "window" });
-    let headers = { "Content-Type": "application/json" };
-    if (clients.length > 0) {
-      // Ask client for auth token
-      const msg = await sendAndWait(clients[0], { type: "GET_AUTH_TOKEN" });
-      if (msg && msg.token) {
-        headers["Authorization"] = `Bearer ${msg.token}`;
-      }
-    }
-    // Try to find the API base URL from cached config
-    const configResp = await caches.match("/config.js");
-    let apiBase = "";
-    if (configResp) {
-      const text = await configResp.text();
-      const match = text.match(/apiBaseUrl["']?\s*[:=]\s*["']([^"']+)/);
-      if (match) apiBase = match[1];
-    }
-    await fetch(`${apiBase}/log/energy?date=${today}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ period, value: score }),
+async function logFromNotification(data, score) {
+  // Tell the open client to log the energy score
+  const clients = await self.clients.matchAll({ type: "window" });
+  for (const client of clients) {
+    client.postMessage({
+      type: "LOG_ENERGY",
+      period: data.period,
+      value: score,
     });
-  } catch {
-    // Queue for later
-    await enqueue({
-      method: "POST",
-      url: `/log/energy?date=${today}`,
-      body: { period, value: score },
-    });
+  }
+  // If no client open, open the app
+  if (clients.length === 0) {
+    await self.clients.openWindow("/");
   }
 }
 
-function effectiveToday() {
-  const now = new Date();
-  if (now.getHours() < 3) {
-    now.setDate(now.getDate() - 1);
-  }
-  return now.toISOString().slice(0, 10);
+function toMinutes(timeStr) {
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
 }
 
-function sendAndWait(client, msg) {
-  return new Promise((resolve) => {
-    const channel = new MessageChannel();
-    channel.port1.onmessage = (e) => resolve(e.data);
-    client.postMessage(msg, [channel.port2]);
-    setTimeout(() => resolve(null), 2000);
+function isDue(timeStr, nowMinutes) {
+  const t = toMinutes(timeStr);
+  return nowMinutes >= t && nowMinutes < t + 30;
+}
+
+function notify(title, body, tag, opts) {
+  self.registration.showNotification(title, {
+    body,
+    icon: "/icon-192.png",
+    tag,
+    ...opts,
   });
+}
+
+function checkEnergyNotifications(settings, todayState, nowMin) {
+  const checks = [
+    { time: settings.energy_morning, period: "morning", val: todayState?.energy?.morning },
+    { time: settings.energy_afternoon, period: "afternoon", val: todayState?.energy?.afternoon },
+    { time: settings.energy_evening, period: "evening", val: todayState?.energy?.evening },
+  ];
+  for (const { time, period, val } of checks) {
+    if (val != null || !isDue(time, nowMin)) continue;
+    notify(
+      `${period[0].toUpperCase() + period.slice(1)} energy`,
+      "How's your energy?",
+      `energy-${period}`,
+      {
+        actions: [
+          { action: "energy_low", title: "Low" },
+          { action: "energy_good", title: "Good" },
+        ],
+        data: { period },
+      }
+    );
+  }
+}
+
+function checkDoseNotifications(settings, todayState, nowMin) {
+  if (!todayState || todayState.untakenCount <= 0) return;
+  if (isDue(settings.morning_doses, nowMin)) {
+    notify("Morning supplements", `${todayState.untakenCount} to take`, "morning-doses");
+  }
+  if (isDue(settings.missed_dose_nudge, nowMin)) {
+    notify("Missed doses", "Morning supplements not logged yet", "missed-dose");
+  }
+}
+
+function checkEveningNotification(settings, todayState, nowMin) {
+  if (!isDue(settings.evening_wrapup, nowMin)) return;
+  const missing = [];
+  if (todayState?.sleep == null) missing.push("sleep");
+  if (todayState?.workoutDone == null) missing.push("workout");
+  if (missing.length > 0) {
+    notify("Day incomplete", `Still need: ${missing.join(", ")}`, "evening-wrapup");
+  }
+}
+
+function checkNotifications(settings, todayState) {
+  if (!settings?.enabled) return;
+  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  checkEnergyNotifications(settings, todayState, nowMin);
+  checkDoseNotifications(settings, todayState, nowMin);
+  checkEveningNotification(settings, todayState, nowMin);
 }
