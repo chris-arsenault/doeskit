@@ -15,21 +15,12 @@ type Props = {
   type_: SupplementType;
   brands: SupplementBrand[];
   activeBrand: SupplementBrand | undefined;
-  hasSelection: boolean;
   cycle: Cycle | undefined;
   expanded: boolean;
   onToggle: () => void;
 };
 
-export default function TypeRow({
-  type_,
-  brands,
-  activeBrand,
-  hasSelection,
-  cycle,
-  expanded,
-  onToggle,
-}: Props) {
+export default function TypeRow({ type_, brands, activeBrand, cycle, expanded, onToggle }: Props) {
   const setActiveBrand = useStore((s) => s.setActiveBrand);
   const updateType = useStore((s) => s.updateType);
 
@@ -47,7 +38,6 @@ export default function TypeRow({
           type_={type_}
           brands={brands}
           activeBrand={activeBrand}
-          hasSelection={hasSelection}
           updateType={updateType}
           setActiveBrand={setActiveBrand}
         />
@@ -94,32 +84,18 @@ type ControlsProps = {
   type_: SupplementType;
   brands: SupplementBrand[];
   activeBrand: SupplementBrand | undefined;
-  hasSelection: boolean;
   updateType: (id: string, timing: string, tdo: boolean, active: boolean) => Promise<void>;
   setActiveBrand: (typeId: string, brandId: string) => Promise<void>;
 };
 
-function TypeControls({
-  type_,
-  brands,
-  activeBrand,
-  hasSelection,
-  updateType,
-  setActiveBrand,
-}: ControlsProps) {
+function TypeControls({ type_, brands, activeBrand, updateType, setActiveBrand }: ControlsProps) {
   return (
     <div className={styles.typeControls}>
       <div className={styles.controlRow}>
         <span className={styles.controlLabel}>Active</span>
         <button
           className={`${styles.togglePill} ${type_.active ? styles.toggleOn : ""}`}
-          onClick={async () => {
-            const turningOn = !type_.active;
-            await updateType(type_.id, type_.timing, type_.training_day_only, turningOn);
-            if (turningOn && brands.length === 1 && !hasSelection) {
-              await setActiveBrand(type_.id, brands[0].id);
-            }
-          }}
+          onClick={() => updateType(type_.id, type_.timing, type_.training_day_only, !type_.active)}
         >
           {type_.active ? "On" : "Off"}
         </button>

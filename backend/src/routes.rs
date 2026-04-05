@@ -98,9 +98,16 @@ async fn get_today(
             let supp_log = supp_logs.iter().find(|l| l.type_id == t.id);
             let brand = if supp_log.is_some_and(|l| l.taken) {
                 brands.iter().find(|b| b.id == supp_log.unwrap().brand_id)
-            } else {
-                let brand_id = selections.get(&t.id)?;
+            } else if let Some(brand_id) = selections.get(&t.id) {
                 brands.iter().find(|b| b.id == *brand_id)
+            } else {
+                // Auto-select when only one brand exists for this type
+                let type_brands: Vec<_> = brands.iter().filter(|b| b.type_id == t.id).collect();
+                if type_brands.len() == 1 {
+                    Some(type_brands[0])
+                } else {
+                    None
+                }
             }?;
             let servings = compute_servings(t.target_dose, brand.serving_dose, &brand.form);
             let label = format_dose_label(servings, brand.units_per_serving, &brand.unit_name);

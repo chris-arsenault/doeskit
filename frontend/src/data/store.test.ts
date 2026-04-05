@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { offsetDate, flattenResponse, findMissingAutoSelections } from "./store";
+import { offsetDate, flattenResponse } from "./store";
 import type { SupplementType, SupplementBrand, DailyDose } from "./store";
 
 // ── offsetDate ─────────────────────────────────────────────
@@ -155,88 +155,5 @@ describe("flattenResponse", () => {
     expect(result.sleep).toBeNull();
     expect(result.workoutDone).toBeNull();
     expect(result.workoutMotivation).toBeNull();
-  });
-});
-
-// ── findMissingAutoSelections (moved from autoSelect.test.ts) ──
-
-function makeAutoType(overrides: Partial<SupplementType> & { id: string }): SupplementType {
-  return {
-    name: overrides.id,
-    timing: "morning",
-    training_day_only: false,
-    active: true,
-    target_dose: 200,
-    target_unit: "mg",
-    sort_order: 0,
-    ...overrides,
-  };
-}
-
-function makeAutoBrand(typeId: string, brandId: string): SupplementBrand {
-  return {
-    id: brandId,
-    type_id: typeId,
-    brand_id: "test",
-    brand_name: "Test",
-    product_name: "Test Product",
-    serving_dose: 200,
-    serving_unit: "mg",
-    units_per_serving: 1,
-    unit_name: "capsule",
-    form: "pill",
-    in_stock: true,
-  };
-}
-
-describe("findMissingAutoSelections", () => {
-  it("returns the sole brand for an active type with no selection", () => {
-    const types = [makeAutoType({ id: "l-theanine" })];
-    const brands = [makeAutoBrand("l-theanine", "theanine-nutricost")];
-    expect(findMissingAutoSelections(types, brands, {})).toEqual([
-      { typeId: "l-theanine", brandId: "theanine-nutricost" },
-    ]);
-  });
-
-  it("skips types that already have a selection", () => {
-    const types = [makeAutoType({ id: "creatine" })];
-    const brands = [makeAutoBrand("creatine", "creatine-thorne")];
-    expect(findMissingAutoSelections(types, brands, { creatine: "creatine-thorne" })).toEqual([]);
-  });
-
-  it("skips inactive types", () => {
-    const types = [makeAutoType({ id: "l-theanine", active: false })];
-    const brands = [makeAutoBrand("l-theanine", "theanine-nutricost")];
-    expect(findMissingAutoSelections(types, brands, {})).toEqual([]);
-  });
-
-  it("skips types with multiple brands", () => {
-    const types = [makeAutoType({ id: "creatine" })];
-    const brands = [
-      makeAutoBrand("creatine", "creatine-thorne"),
-      makeAutoBrand("creatine", "creatine-thorne-agpc"),
-    ];
-    expect(findMissingAutoSelections(types, brands, {})).toEqual([]);
-  });
-
-  it("skips types with zero brands", () => {
-    expect(findMissingAutoSelections([makeAutoType({ id: "orphan" })], [], {})).toEqual([]);
-  });
-
-  it("handles mix: returns only single-brand unselected active types", () => {
-    const types = [
-      makeAutoType({ id: "l-theanine" }),
-      makeAutoType({ id: "creatine" }),
-      makeAutoType({ id: "zinc", active: false }),
-    ];
-    const brands = [
-      makeAutoBrand("l-theanine", "theanine-nutricost"),
-      makeAutoBrand("creatine", "creatine-thorne"),
-      makeAutoBrand("creatine", "creatine-thorne-agpc"),
-      makeAutoBrand("zinc", "zinc-nutricost"),
-    ];
-    expect(findMissingAutoSelections(types, brands, {})).toEqual([
-      { typeId: "l-theanine", brandId: "theanine-nutricost" },
-    ]);
   });
 });
