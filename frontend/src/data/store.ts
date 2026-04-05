@@ -187,19 +187,22 @@ const INITIAL_STATE = {
   schedule: { days: [] } as TrainingSchedule,
 };
 
-async function fetchBrandsAndAutoSelect(
-  types: SupplementType[]
-): Promise<{ allBrands: SupplementBrand[]; activeSelections: Record<string, string> }> {
-  const [allBrands, activeSelections] = await Promise.all([
+async function fetchBrandsAndAutoSelect(): Promise<{
+  allTypes: SupplementType[];
+  allBrands: SupplementBrand[];
+  activeSelections: Record<string, string>;
+}> {
+  const [allTypes, allBrands, activeSelections] = await Promise.all([
+    apiGet<SupplementType[]>("/types"),
     apiGet<SupplementBrand[]>("/brands"),
     apiGet<Record<string, string>>("/selections"),
   ]);
-  const missing = findMissingAutoSelections(types, allBrands, activeSelections);
+  const missing = findMissingAutoSelections(allTypes, allBrands, activeSelections);
   for (const { typeId, brandId } of missing) {
     await apiPut(`/brands/${typeId}/active/${brandId}`);
     activeSelections[typeId] = brandId;
   }
-  return { allBrands, activeSelections };
+  return { allTypes, allBrands, activeSelections };
 }
 
 export const useStore = create<DosekitStore>((set, get) => ({
@@ -261,7 +264,7 @@ export const useStore = create<DosekitStore>((set, get) => ({
   },
 
   loadTypes: async () => set({ allTypes: await apiGet("/types") }),
-  loadBrands: async () => set(await fetchBrandsAndAutoSelect(get().allTypes)),
+  loadBrands: async () => set(await fetchBrandsAndAutoSelect()),
   loadCycles: async () => set({ cycles: await apiGet("/cycles") }),
   loadSchedule: async () => set({ schedule: await apiGet("/schedule") }),
   setActiveBrand: async (typeId, brandId) => {
