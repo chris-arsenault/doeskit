@@ -132,6 +132,7 @@ INSERT INTO supplement_brands (id, type_id, brand_id, product_name, serving_dose
   ('intra-pf',              'intra-carb',   'precision-fuel',    'Carb & Electrolyte Drink Mix PF 30', 1,      'serving',      2, 'scoop',   'scoop', '30g carbs per 2 scoops.',                               'https://www.precisionhydration.com/us/en/products/pf-30-drink-mix/', NULL, NULL),
   -- Intra Aminos
   ('intra-amino-momentous', 'intra-amino',  'momentous',         'Vital Aminos',                       1,      'serving',      1, 'scoop',   'scoop', '9 EAAs, 2.5g leucine. NSF Certified.',                  'https://www.livemomentous.com/products/vital-amino',             NULL, 25),
+  ('intra-amino-thorne',    'intra-amino',  'thorne',            'Amino Complex (Lemon)',              1,      'serving',      1, 'scoop',   'scoop', '9 EAAs, 1.25g leucine. NSF Certified. 30 servings.',    'https://www.thorne.com/products/dp/amino-complex-lemon',         0.90, 10),
   -- Post-Workout Protein
   ('whey-tl',               'post-protein', 'transparent-labs',  'Grass-Fed Whey Protein Isolate',     28,     'g protein',    1, 'scoop',   'scoop', 'Grass-fed American dairy. Informed Choice.',             'https://transparentlabs.com/products/whey-protein-isolate',      NULL, NULL),
   ('plant-thorne',          'post-protein', 'thorne',            'Plant Protein (Chocolate)',           11,     'g protein',    1, 'scoop',   'scoop', 'Pea + rice + chia. 70 cal/scoop. NSF Certified.',       'https://www.thorne.com/products/dp/plant-protein-chocolate-flavored', NULL, 10),

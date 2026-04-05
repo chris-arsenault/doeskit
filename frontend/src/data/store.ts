@@ -249,3 +249,8 @@ export const useStore = create<DosekitStore>((set, get) => ({
     get().refresh();
   },
 }));
+
+// Re-fetch after offline mutations are synced
+if (typeof window !== "undefined") {
+  window.addEventListener("dosekit-synced", () => useStore.getState().refresh());
+}
