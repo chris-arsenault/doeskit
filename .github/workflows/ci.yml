@@ -63,11 +63,11 @@ jobs:
         working-directory: frontend
         run: pnpm exec eslint .
 
-      - name: Typecheck frontend
+      - name: Lint typecheck frontend
         working-directory: frontend
         run: pnpm exec tsc --noEmit
 
-      - name: Format check frontend
+      - name: Lint format frontend
         working-directory: frontend
         run: pnpm exec prettier --check .
 
@@ -75,15 +75,15 @@ jobs:
         working-directory: frontend
         run: pnpm exec vitest run --coverage
 
-      - name: Clippy
+      - name: Lint clippy
         working-directory: backend
         run: cargo clippy -- -D warnings
 
-      - name: Rustfmt
+      - name: Lint rustfmt
         working-directory: backend
         run: cargo fmt -- --check
 
-      - name: Terraform fmt
+      - name: Lint terraform
         run: terraform fmt -check -recursive infrastructure/terraform/
 
       # SonarQube
@@ -151,6 +151,3 @@ jobs:
           role-session-name: GitHubActions-${{ github.run_id }}
           aws-region: us-east-1
       - uses: chris-arsenault/platform/.github/actions/report-build@main
-        with:
-          status: ${{ needs.ci.result }}
-          lint-passed: ${{ needs.ci.result == 'success' }}
