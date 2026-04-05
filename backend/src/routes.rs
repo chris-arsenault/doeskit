@@ -37,6 +37,14 @@ pub fn api_routes() -> Router<Arc<AppState>> {
         .route("/compare", get(get_compare))
         .route("/brands/{id}/pricing", put(update_brand_pricing))
         .route("/health", get(health))
+        .route("/push/subscribe", post(push_subscribe))
+        .route("/push/unsubscribe", post(push_unsubscribe))
+        .route(
+            "/notifications/settings",
+            get(get_notification_settings).put(update_notification_settings),
+        )
+        .route("/notifications/check", post(check_notifications))
+        .route("/notifications/vapid-public", get(get_vapid_public))
 }
 
 async fn health() -> Json<serde_json::Value> {
@@ -512,6 +520,91 @@ fn is_cycle_on(cycle: &Cycle, today: &str) -> bool {
     let total_days = (cycle.weeks_on + cycle.weeks_off) * 7;
     let day_in_cycle = (current - start).num_days() as u32 % total_days;
     day_in_cycle < cycle.weeks_on * 7
+}
+
+// ── Push notifications ─────────────────────────────────────
+
+async fn push_subscribe(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<PushSubscription>,
+) -> StatusCode {
+    match state.db.add_push_subscription(&body).await {
+        Ok(()) => StatusCode::OK,
+        Err(e) => {
+            tracing::error!("Push subscribe error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct UnsubscribeBody {
+    endpoint: String,
+}
+
+async fn push_unsubscribe(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<UnsubscribeBody>,
+) -> StatusCode {
+    match state.db.delete_push_subscription(&body.endpoint).await {
+        Ok(()) => StatusCode::OK,
+        Err(e) => {
+            tracing::error!("Push unsubscribe error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
+async fn get_notification_settings(
+    State(state): State<Arc<AppState>>,
+) -> AppResult<NotificationSettings> {
+    let settings: NotificationSettings = state
+        .db
+        .get_config("notification_settings")
+        .await
+        .map_err(db_err)?
+        .unwrap_or_default();
+    Ok(Json(settings))
+}
+
+async fn update_notification_settings(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<NotificationSettings>,
+) -> StatusCode {
+    match state.db.put_config("notification_settings", &body).await {
+        Ok(()) => StatusCode::OK,
+        Err(e) => {
+            tracing::error!("Update notification settings error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct CheckQuery {
+    tz_offset: Option<i32>,
+}
+
+async fn check_notifications(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<CheckQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let tz_offset = query.tz_offset.unwrap_or(-240); // Default EDT
+    match crate::notifications::check_and_send(&state.db, tz_offset).await {
+        Ok(msg) => (StatusCode::OK, Json(serde_json::json!({ "result": msg }))),
+        Err(e) => {
+            tracing::error!("Notification check error: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e })),
+            )
+        }
+    }
+}
+
+async fn get_vapid_public() -> AppResult<serde_json::Value> {
+    let key = std::env::var("VAPID_PUBLIC").unwrap_or_default();
+    Ok(Json(serde_json::json!({ "key": key })))
 }
 
 #[cfg(test)]

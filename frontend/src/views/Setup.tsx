@@ -1,6 +1,14 @@
 import { useEffect, useState, useCallback, type FormEvent } from "react";
 import { useStore, type SupplementType, type SupplementBrand, type Cycle } from "../data/store";
 import { apiPost, apiDelete } from "../data/api";
+import {
+  getNotificationSettings,
+  updateNotificationSettings,
+  subscribeToPush,
+  unsubscribeFromPush,
+  isPushSubscribed,
+  type NotificationSettings,
+} from "../data/notifications";
 import TypeRow from "../components/TypeRow";
 import { Plus, Trash2, Download } from "lucide-react";
 import shared from "../styles/shared.module.css";
@@ -60,9 +68,113 @@ export default function Setup() {
           <Download size={16} />
         </button>
       </div>
+      <NotificationsSection />
       <ScheduleSection schedule={schedule} onChanged={loadSchedule} />
       <CyclesSection cycles={cycles} onChanged={loadCycles} />
       <TypesSection types={types} brands={brands} cycles={cycles} />
+    </div>
+  );
+}
+
+function NotificationsSection() {
+  const [settings, setSettings] = useState<NotificationSettings | null>(null);
+  const [subscribed, setSubscribed] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([getNotificationSettings(), isPushSubscribed()]).then(([s, sub]) => {
+      setSettings(s);
+      setSubscribed(sub);
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading || !settings) return null;
+
+  const toggle = async () => {
+    if (!settings.enabled) {
+      const ok = await subscribeToPush();
+      if (!ok) return;
+      setSubscribed(true);
+    } else if (subscribed) {
+      await unsubscribeFromPush();
+      setSubscribed(false);
+    }
+    const next = { ...settings, enabled: !settings.enabled };
+    await updateNotificationSettings(next);
+    setSettings(next);
+  };
+
+  const update = async (field: keyof NotificationSettings, value: string) => {
+    const next = { ...settings, [field]: value };
+    setSettings(next);
+    await updateNotificationSettings(next);
+  };
+
+  return (
+    <section className={shared.card}>
+      <div className={shared.cardHeader}>
+        <h2 className={shared.cardTitle}>Notifications</h2>
+        <button
+          className={`${styles.togglePill} ${settings.enabled ? styles.toggleOn : ""}`}
+          onClick={toggle}
+        >
+          {settings.enabled ? "On" : "Off"}
+        </button>
+      </div>
+      {settings.enabled && <NotifTimeGrid settings={settings} onUpdate={update} />}
+    </section>
+  );
+}
+
+const NOTIF_FIELDS: Array<{ label: string; field: keyof NotificationSettings }> = [
+  { label: "Morning doses", field: "morning_doses" },
+  { label: "Energy (AM)", field: "energy_morning" },
+  { label: "Energy (PM)", field: "energy_afternoon" },
+  { label: "Energy (Eve)", field: "energy_evening" },
+  { label: "Missed dose nudge", field: "missed_dose_nudge" },
+  { label: "Evening wrap-up", field: "evening_wrapup" },
+];
+
+function NotifTimeGrid({
+  settings,
+  onUpdate,
+}: {
+  settings: NotificationSettings;
+  onUpdate: (field: keyof NotificationSettings, value: string) => void;
+}) {
+  return (
+    <div className={styles.notifGrid}>
+      {NOTIF_FIELDS.map(({ label, field }) => (
+        <TimeRow
+          key={field}
+          label={label}
+          value={settings[field] as string}
+          onChange={(v) => onUpdate(field, v)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TimeRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className={styles.controlRow}>
+      <span className={styles.controlLabel}>{label}</span>
+      <input
+        type="time"
+        className={styles.timingSelect}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </div>
   );
 }

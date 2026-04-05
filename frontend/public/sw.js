@@ -181,3 +181,104 @@ async function flushQueue() {
     client.postMessage({ type: "SYNC_COMPLETE", remaining: remaining.length });
   }
 }
+
+// ── Push notifications ─────────────────────────────────────
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  const payload = event.data.json();
+  const options = {
+    body: payload.body,
+    icon: payload.icon || "/icon-192.png",
+    badge: "/icon-192.png",
+    tag: payload.tag,
+    renotify: true,
+    actions: payload.actions || [],
+    data: payload.data || {},
+  };
+  event.waitUntil(self.registration.showNotification(payload.title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const action = event.action;
+  const data = event.notification.data || {};
+
+  // Energy quick-reply: Low=3, Good=7
+  if (action.startsWith("energy_") && action.endsWith("_low")) {
+    const period = data.period;
+    event.waitUntil(postEnergyScore(period, 3));
+    return;
+  }
+  if (action.startsWith("energy_") && action.endsWith("_good")) {
+    const period = data.period;
+    event.waitUntil(postEnergyScore(period, 7));
+    return;
+  }
+
+  // Default: open the app
+  const url = data.url || "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window" }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes(url) && "focus" in client) {
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});
+
+async function postEnergyScore(period, score) {
+  const today = effectiveToday();
+  try {
+    // Get auth token from an open client
+    const clients = await self.clients.matchAll({ type: "window" });
+    let headers = { "Content-Type": "application/json" };
+    if (clients.length > 0) {
+      // Ask client for auth token
+      const msg = await sendAndWait(clients[0], { type: "GET_AUTH_TOKEN" });
+      if (msg && msg.token) {
+        headers["Authorization"] = `Bearer ${msg.token}`;
+      }
+    }
+    // Try to find the API base URL from cached config
+    const configResp = await caches.match("/config.js");
+    let apiBase = "";
+    if (configResp) {
+      const text = await configResp.text();
+      const match = text.match(/apiBaseUrl["']?\s*[:=]\s*["']([^"']+)/);
+      if (match) apiBase = match[1];
+    }
+    await fetch(`${apiBase}/log/energy?date=${today}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ period, value: score }),
+    });
+  } catch {
+    // Queue for later
+    await enqueue({
+      method: "POST",
+      url: `/log/energy?date=${today}`,
+      body: { period, value: score },
+    });
+  }
+}
+
+function effectiveToday() {
+  const now = new Date();
+  if (now.getHours() < 3) {
+    now.setDate(now.getDate() - 1);
+  }
+  return now.toISOString().slice(0, 10);
+}
+
+function sendAndWait(client, msg) {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = (e) => resolve(e.data);
+    client.postMessage(msg, [channel.port2]);
+    setTimeout(() => resolve(null), 2000);
+  });
+}

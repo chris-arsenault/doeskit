@@ -175,6 +175,40 @@ pub struct HistoryQuery {
     pub days: Option<u32>,
 }
 
+// ── Push notifications ─────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PushSubscription {
+    pub endpoint: String,
+    pub p256dh: String,
+    pub auth: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationSettings {
+    pub enabled: bool,
+    pub morning_doses: String,
+    pub energy_morning: String,
+    pub energy_afternoon: String,
+    pub energy_evening: String,
+    pub missed_dose_nudge: String,
+    pub evening_wrapup: String,
+}
+
+impl Default for NotificationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            morning_doses: "07:00".to_string(),
+            energy_morning: "10:00".to_string(),
+            energy_afternoon: "14:00".to_string(),
+            energy_evening: "20:00".to_string(),
+            missed_dose_nudge: "12:00".to_string(),
+            evening_wrapup: "21:30".to_string(),
+        }
+    }
+}
+
 // ── Compare ─────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
