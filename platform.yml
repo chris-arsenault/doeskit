@@ -1,3 +1,7 @@
 project: dosekit
 prefix: dosekit
 migrations: db/migrations
+stack:
+  - rust
+  - typescript
+  - terraform
