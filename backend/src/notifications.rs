@@ -3,14 +3,14 @@ use crate::models::*;
 use web_push::*;
 
 struct VapidKeys {
-    private: String,
+    private_pem: String,
     email: String,
 }
 
 fn load_vapid_keys() -> Option<VapidKeys> {
-    let private = std::env::var("VAPID_PRIVATE").ok()?;
+    let private_pem = std::env::var("VAPID_PRIVATE_PEM").ok()?;
     let email = std::env::var("VAPID_EMAIL").unwrap_or_else(|_| "admin@ahara.io".to_string());
-    Some(VapidKeys { private, email })
+    Some(VapidKeys { private_pem, email })
 }
 
 async fn send_push(
@@ -31,7 +31,7 @@ async fn send_push(
     builder.set_payload(ContentEncoding::Aes128Gcm, content.as_bytes());
     builder.set_ttl(3600);
 
-    let mut sig = VapidSignatureBuilder::from_base64(&keys.private, &subscription_info)
+    let mut sig = VapidSignatureBuilder::from_pem(keys.private_pem.as_bytes(), &subscription_info)
         .map_err(|e| format!("{e}"))?;
     sig.add_claim("sub", format!("mailto:{}", keys.email));
     let signature = sig.build().map_err(|e| format!("{e}"))?;

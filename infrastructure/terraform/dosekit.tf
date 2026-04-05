@@ -51,12 +51,11 @@ data "aws_ssm_parameter" "db_database" {
   name = "/platform/db/dosekit/database"
 }
 
-data "aws_ssm_parameter" "vapid_public" {
-  name = "/platform/dosekit/vapid-public"
-}
+# ── VAPID keys for Web Push ──────────────────────────────────
 
-data "aws_ssm_parameter" "vapid_private" {
-  name = "/platform/dosekit/vapid-private"
+resource "tls_private_key" "vapid" {
+  algorithm   = "ECDSA"
+  ecdsa_curve = "P256"
 }
 
 # ── Cognito client (self-service per INTEGRATION.md Step 6) ──
@@ -135,11 +134,10 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      DATABASE_URL  = "postgresql://${nonsensitive(data.aws_ssm_parameter.db_username.value)}:${data.aws_ssm_parameter.db_password.value}@${nonsensitive(data.aws_ssm_parameter.rds_address.value)}:${nonsensitive(data.aws_ssm_parameter.rds_port.value)}/${nonsensitive(data.aws_ssm_parameter.db_database.value)}?sslmode=require"
-      RUST_LOG      = "info"
-      VAPID_PUBLIC  = data.aws_ssm_parameter.vapid_public.value
-      VAPID_PRIVATE = data.aws_ssm_parameter.vapid_private.value
-      VAPID_EMAIL   = "admin@ahara.io"
+      DATABASE_URL      = "postgresql://${nonsensitive(data.aws_ssm_parameter.db_username.value)}:${data.aws_ssm_parameter.db_password.value}@${nonsensitive(data.aws_ssm_parameter.rds_address.value)}:${nonsensitive(data.aws_ssm_parameter.rds_port.value)}/${nonsensitive(data.aws_ssm_parameter.db_database.value)}?sslmode=require"
+      RUST_LOG          = "info"
+      VAPID_PRIVATE_PEM = tls_private_key.vapid.private_key_pem
+      VAPID_EMAIL       = "admin@ahara.io"
     }
   }
 }

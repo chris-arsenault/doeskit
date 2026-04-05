@@ -4,6 +4,7 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
+use base64::Engine;
 use std::sync::Arc;
 
 use crate::models::*;
@@ -603,8 +604,15 @@ async fn check_notifications(
 }
 
 async fn get_vapid_public() -> AppResult<serde_json::Value> {
-    let key = std::env::var("VAPID_PUBLIC").unwrap_or_default();
-    Ok(Json(serde_json::json!({ "key": key })))
+    let pem = std::env::var("VAPID_PRIVATE_PEM").unwrap_or_default();
+    if pem.is_empty() {
+        return Ok(Json(serde_json::json!({ "key": "" })));
+    }
+    let builder = web_push::VapidSignatureBuilder::from_pem_no_sub(pem.as_bytes())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let pub_key = builder.get_public_key();
+    let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&pub_key);
+    Ok(Json(serde_json::json!({ "key": encoded })))
 }
 
 #[cfg(test)]
