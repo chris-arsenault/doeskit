@@ -1,6 +1,6 @@
 output "site_url" {
   description = "Frontend URL"
-  value       = module.frontend.website_url
+  value       = module.frontend.url
 }
 
 output "api_url" {
@@ -10,5 +10,5 @@ output "api_url" {
 
 output "lambda_function" {
   description = "Lambda function name"
-  value       = aws_lambda_function.api.function_name
+  value       = module.api.function_names["api"]
 }
