@@ -47,7 +47,7 @@ module "api" {
 # ── Frontend SPA ────────────────────────────────────────────
 
 module "frontend" {
-  source         = "git::https://github.com/chris-arsenault/ahara-tf-patterns.git//modules/spa-website"
+  source         = "git::https://github.com/chris-arsenault/ahara-tf-patterns.git//modules/website"
   hostname       = local.hostname
   site_directory = "${path.root}/../../frontend/dist"
 
