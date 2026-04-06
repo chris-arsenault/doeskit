@@ -38,7 +38,7 @@ module "api" {
 
   lambdas = {
     api = {
-      zip    = "${path.root}/../../backend/target/lambda/bootstrap/bootstrap.zip"
+      binary = "${path.root}/../../backend/target/lambda/bootstrap/bootstrap"
       routes = [{ priority = 201, paths = ["/*"], authenticated = true }]
     }
   }
