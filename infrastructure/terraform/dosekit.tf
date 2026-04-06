@@ -29,6 +29,7 @@ module "cognito" {
 
 module "api" {
   source   = "git::https://github.com/chris-arsenault/ahara-tf-patterns.git//modules/alb-api"
+  prefix   = "dosekit"
   hostname = local.api_domain
 
   environment = {
@@ -48,6 +49,7 @@ module "api" {
 
 module "frontend" {
   source         = "git::https://github.com/chris-arsenault/ahara-tf-patterns.git//modules/website"
+  prefix         = "dosekit"
   hostname       = local.hostname
   site_directory = "${path.root}/../../frontend/dist"
 
