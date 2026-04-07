@@ -1,14 +1,21 @@
 // Dosekit Service Worker — offline-first with background sync
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const STATIC_CACHE = `dosekit-static-${CACHE_VERSION}`;
 const API_CACHE = `dosekit-api-${CACHE_VERSION}`;
-// Shell files cached on install (app skeleton)
-const SHELL_URLS = ["/", "/manifest.json", "/icon-192.png", "/icon.svg"];
+// Shell files cached on install — static assets only.
+// Do NOT precache "/" (index.html) or "/config.js": those must be fetched
+// fresh on every deploy so hashed bundle refs and runtime config stay current.
+const SHELL_URLS = ["/manifest.json", "/icon-192.png", "/icon.svg"];
 
 // ── Install: cache app shell ───────────────────────────────
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.addAll(SHELL_URLS)));
+  event.waitUntil(
+    caches
+      .open(STATIC_CACHE)
+      .then((cache) => cache.addAll(SHELL_URLS))
+      .catch(() => {})
+  );
   self.skipWaiting();
 });
 
@@ -36,15 +43,47 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   if (url.origin !== self.location.origin && !url.pathname.startsWith("/api")) return;
 
+  // Runtime config: never cache. Cognito client IDs and apiBaseUrl change on
+  // deploy, and a stale /config.js is exactly what wedges the app.
+  if (url.pathname === "/config.js") {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // Navigation requests (HTML documents): network-first so a fresh deploy's
+  // index.html — which references the new hashed asset bundles — always wins
+  // when online. Falls back to whatever index.html copy we have when offline.
+  if (event.request.mode === "navigate") {
+    event.respondWith(networkFirstDocument(event.request));
+    return;
+  }
+
   // API requests: network-first, fall back to cache
   if (isApiRequest(url)) {
     event.respondWith(networkFirstApi(event.request));
     return;
   }
 
-  // Static assets: cache-first, fall back to network
+  // Static assets (hashed bundles, icons, manifest): cache-first
   event.respondWith(cacheFirstStatic(event.request));
 });
+
+async function networkFirstDocument(request) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(STATIC_CACHE);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    const fallback = await caches.match("/");
+    if (fallback) return fallback;
+    return new Response("Offline", { status: 503 });
+  }
+}
 
 const API_PREFIXES = [
   "/today",

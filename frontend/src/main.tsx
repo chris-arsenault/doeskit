@@ -14,6 +14,17 @@ if ("serviceWorker" in navigator) {
 
   window.addEventListener("online", () => flushOfflineQueue());
 
+  // When a new SW takes control of this tab (after skipWaiting+clientsClaim
+  // on a fresh deploy), reload once so the page is served by the new SW —
+  // which means fresh index.html and fresh /config.js. Without this, an
+  // already-loaded tab keeps running stale code under the new controller.
+  let swReloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (swReloaded) return;
+    swReloaded = true;
+    window.location.reload();
+  });
+
   navigator.serviceWorker.addEventListener("message", (event) => {
     if (event.data?.type === "SYNC_COMPLETE") {
       window.dispatchEvent(new Event("dosekit-synced"));
