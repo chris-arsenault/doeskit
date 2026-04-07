@@ -1,15 +1,9 @@
-mod db;
-mod models;
-mod routes;
-
 use axum::Router;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
-pub struct AppState {
-    pub db: db::PgPool,
-}
+use dosekit::{db, routes, AppState};
 
 #[tokio::main]
 async fn main() -> Result<(), lambda_http::Error> {
