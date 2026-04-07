@@ -5,3 +5,6 @@ stack:
   - rust
   - typescript
   - terraform
+rust_artifacts:
+  lambdas:
+    - dosekit

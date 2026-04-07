@@ -8,4 +8,4 @@ echo "==> Building Rust Lambda..."
 cd "$PROJECT_ROOT/backend"
 cargo lambda build --release --output-format zip
 
-echo "==> Lambda zip ready at: target/lambda/bootstrap/bootstrap.zip"
+echo "==> Lambda zip ready at: target/lambda/dosekit/bootstrap.zip"

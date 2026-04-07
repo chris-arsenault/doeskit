@@ -39,7 +39,7 @@ module "api" {
 
   lambdas = {
     api = {
-      binary = "${path.root}/../../backend/target/lambda/bootstrap/bootstrap"
+      binary = "${path.root}/../../backend/target/lambda/dosekit/bootstrap"
       routes = [{ priority = 201, paths = ["/*"], authenticated = true }]
     }
   }
