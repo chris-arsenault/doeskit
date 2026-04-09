@@ -171,6 +171,7 @@ INSERT INTO active_selections (type_id, brand_id) VALUES
   ('alcar',       'alcar-momentous'),
   ('alpha-gpc',   'agpc-momentous'),
   ('l-tyrosine',  'tyrosine-momentous'),
+  ('l-theanine',  'theanine-nutricost'),
   ('omega3',      'omega3-sr'),
   ('vitamin-d3',  'd3-thorne-dk2'),
   ('vitamin-k2',  'k2-thorne-dk2'),

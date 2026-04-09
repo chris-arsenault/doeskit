@@ -6,6 +6,6 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "==> Building Rust Lambda..."
 cd "$PROJECT_ROOT/backend"
-cargo lambda build --release --output-format zip
+cargo lambda build --release
 
-echo "==> Lambda zip ready at: target/lambda/dosekit/bootstrap.zip"
+echo "==> Lambda binary ready at: target/lambda/dosekit/bootstrap"

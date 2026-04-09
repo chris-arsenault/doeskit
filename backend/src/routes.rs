@@ -81,7 +81,7 @@ async fn get_today(
 
     let is_training_day = check_training_day(&schedule, &date);
 
-    let doses: Vec<DoseStatus> = types
+    let active_types: Vec<_> = types
         .iter()
         .filter(|t| {
             if !t.active {
@@ -96,28 +96,25 @@ async fn get_today(
             }
             true
         })
+        .collect::<Vec<_>>();
+
+    let doses: Vec<DoseStatus> = active_types
+        .iter()
         .filter_map(|t| {
-            // Use logged brand only if taken=true (preserves historical accuracy).
-            // Otherwise use active selection (reflects current brand choice).
             let supp_log = supp_logs.iter().find(|l| l.type_id == t.id);
-            let brand = if supp_log.is_some_and(|l| l.taken) {
-                brands.iter().find(|b| b.id == supp_log.unwrap().brand_id)
-            } else if let Some(brand_id) = selections.get(&t.id) {
-                brands.iter().find(|b| b.id == *brand_id)
-            } else {
-                // Auto-select when only one brand exists for this type
-                let type_brands: Vec<_> = brands.iter().filter(|b| b.type_id == t.id).collect();
-                if type_brands.len() == 1 {
-                    Some(type_brands[0])
-                } else {
-                    None
-                }
-            }?;
+            let brand = resolve_brand(&t.id, &brands, &selections, supp_log);
+            if brand.is_none() {
+                tracing::warn!(
+                    type_id = t.id.as_str(),
+                    "excluded from today: no brand resolved"
+                );
+            }
+            let brand = brand?;
             let servings = compute_servings(t.target_dose, brand.serving_dose, &brand.form);
             let label = format_dose_label(servings, brand.units_per_serving, &brand.unit_name);
             Some(DoseStatus {
                 dose: DailyDose {
-                    supplement_type: t.clone(),
+                    supplement_type: (*t).clone(),
                     brand: brand.clone(),
                     servings_needed: servings,
                     dose_label: label,
@@ -126,6 +123,14 @@ async fn get_today(
             })
         })
         .collect();
+
+    tracing::info!(
+        date = date.as_str(),
+        active_types = active_types.len(),
+        resolved_doses = doses.len(),
+        excluded = active_types.len() - doses.len(),
+        "today checklist built"
+    );
 
     Ok(Json(TodayResponse {
         date,
@@ -460,6 +465,76 @@ async fn get_compare(State(state): State<Arc<AppState>>) -> AppResult<CompareRes
     }))
 }
 
+// ── Brand resolution ────────────────────────────────────────
+
+/// Resolves which brand product to show for a supplement type on the today list.
+///
+/// Priority: (1) logged brand if taken today, (2) active selection, (3) auto-select
+/// if exactly one brand exists for the type. Returns None if no brand can be
+/// determined, which causes the supplement to be excluded from the today list.
+fn resolve_brand<'a>(
+    type_id: &str,
+    brands: &'a [SupplementBrand],
+    selections: &std::collections::HashMap<String, String>,
+    supp_log: Option<&SupplementLog>,
+) -> Option<&'a SupplementBrand> {
+    // Path 1: Use logged brand if supplement was marked taken today
+    if let Some(log) = supp_log {
+        if log.taken {
+            let brand = brands.iter().find(|b| b.id == log.brand_id);
+            if brand.is_none() {
+                tracing::warn!(
+                    type_id,
+                    brand_id = log.brand_id.as_str(),
+                    "logged brand not found in brands list (JOIN may have excluded it)"
+                );
+            }
+            return brand;
+        }
+    }
+
+    // Path 2: Use active selection
+    if let Some(selected_id) = selections.get(type_id) {
+        let brand = brands.iter().find(|b| b.id == *selected_id);
+        if brand.is_none() {
+            tracing::warn!(
+                type_id,
+                brand_id = selected_id.as_str(),
+                "active selection brand not found in brands list (JOIN may have excluded it)"
+            );
+        }
+        return brand;
+    }
+
+    // Path 3: Auto-select when only one brand exists for this type
+    let type_brands: Vec<_> = brands.iter().filter(|b| b.type_id == type_id).collect();
+    match type_brands.len() {
+        1 => {
+            tracing::debug!(
+                type_id,
+                brand_id = type_brands[0].id.as_str(),
+                "auto-selected single brand"
+            );
+            Some(type_brands[0])
+        }
+        0 => {
+            tracing::warn!(
+                type_id,
+                "no brands in list for this type (brands table JOIN may have filtered them out)"
+            );
+            None
+        }
+        n => {
+            tracing::warn!(
+                type_id,
+                brand_count = n,
+                "multiple brands, no active selection — cannot auto-select"
+            );
+            None
+        }
+    }
+}
+
 // ── Dose computation ────────────────────────────────────────
 
 fn compute_servings(target: f64, per_serving: f64, form: &str) -> f64 {
@@ -731,5 +806,156 @@ mod tests {
             start_date: "bad-date".into(),
         };
         assert!(is_cycle_on(&cycle, "2026-03-22"));
+    }
+
+    // ── resolve_brand ──────────────────────────────────────
+
+    fn make_brand(id: &str, type_id: &str) -> SupplementBrand {
+        SupplementBrand {
+            id: id.into(),
+            type_id: type_id.into(),
+            brand_id: "test-brand".into(),
+            brand_name: "Test".into(),
+            product_name: "Test Product".into(),
+            serving_dose: 100.0,
+            serving_unit: "mg".into(),
+            units_per_serving: 1.0,
+            unit_name: "capsule".into(),
+            form: "pill".into(),
+            instructions: None,
+            url: None,
+            price_per_serving: None,
+            subscription_discount: None,
+            in_stock: true,
+        }
+    }
+
+    #[test]
+    fn test_resolve_brand_active_selection() {
+        let brands = vec![make_brand("theanine-nutricost", "l-theanine")];
+        let selections = std::collections::HashMap::from([(
+            "l-theanine".to_string(),
+            "theanine-nutricost".to_string(),
+        )]);
+        let result = resolve_brand("l-theanine", &brands, &selections, None);
+        assert_eq!(result.unwrap().id, "theanine-nutricost");
+    }
+
+    #[test]
+    fn test_resolve_brand_auto_select_single_brand() {
+        let brands = vec![make_brand("theanine-nutricost", "l-theanine")];
+        let selections = std::collections::HashMap::new();
+        let result = resolve_brand("l-theanine", &brands, &selections, None);
+        assert_eq!(result.unwrap().id, "theanine-nutricost");
+    }
+
+    #[test]
+    fn test_resolve_brand_auto_select_fails_with_multiple_brands() {
+        let brands = vec![
+            make_brand("alcar-momentous", "alcar"),
+            make_brand("alcar-nutricost", "alcar"),
+        ];
+        let selections = std::collections::HashMap::new();
+        assert!(resolve_brand("alcar", &brands, &selections, None).is_none());
+    }
+
+    #[test]
+    fn test_resolve_brand_no_brands_for_type() {
+        let brands = vec![make_brand("other-brand", "other-type")];
+        let selections = std::collections::HashMap::new();
+        assert!(resolve_brand("l-theanine", &brands, &selections, None).is_none());
+    }
+
+    #[test]
+    fn test_resolve_brand_logged_taken_uses_log_brand() {
+        let brands = vec![
+            make_brand("alcar-momentous", "alcar"),
+            make_brand("alcar-nutricost", "alcar"),
+        ];
+        let selections =
+            std::collections::HashMap::from([("alcar".to_string(), "alcar-momentous".to_string())]);
+        let log = SupplementLog {
+            type_id: "alcar".into(),
+            brand_id: "alcar-nutricost".into(),
+            taken: true,
+        };
+        let result = resolve_brand("alcar", &brands, &selections, Some(&log));
+        assert_eq!(result.unwrap().id, "alcar-nutricost");
+    }
+
+    #[test]
+    fn test_resolve_brand_logged_not_taken_uses_selection() {
+        let brands = vec![
+            make_brand("alcar-momentous", "alcar"),
+            make_brand("alcar-nutricost", "alcar"),
+        ];
+        let selections =
+            std::collections::HashMap::from([("alcar".to_string(), "alcar-momentous".to_string())]);
+        let log = SupplementLog {
+            type_id: "alcar".into(),
+            brand_id: "alcar-nutricost".into(),
+            taken: false,
+        };
+        let result = resolve_brand("alcar", &brands, &selections, Some(&log));
+        assert_eq!(result.unwrap().id, "alcar-momentous");
+    }
+
+    #[test]
+    fn test_resolve_brand_selection_points_to_missing_brand() {
+        // Active selection references a brand that list_brands() didn't return
+        // (e.g., brand_id FK in supplement_brands doesn't exist in brands table)
+        let brands = vec![make_brand("theanine-other", "l-theanine")];
+        let selections = std::collections::HashMap::from([(
+            "l-theanine".to_string(),
+            "theanine-nutricost".to_string(),
+        )]);
+        // Selection exists but points to brand not in the list — returns None,
+        // does NOT fall through to auto-select
+        assert!(resolve_brand("l-theanine", &brands, &selections, None).is_none());
+    }
+
+    #[test]
+    fn test_resolve_brand_logged_taken_but_brand_missing() {
+        // Taken with a brand that list_brands() didn't return
+        let brands = vec![make_brand("theanine-other", "l-theanine")];
+        let log = SupplementLog {
+            type_id: "l-theanine".into(),
+            brand_id: "theanine-nutricost".into(),
+            taken: true,
+        };
+        let selections = std::collections::HashMap::new();
+        // Log says taken with this brand, but brand not in list — returns None,
+        // does NOT fall through to selection or auto-select
+        assert!(resolve_brand("l-theanine", &brands, &selections, Some(&log)).is_none());
+    }
+
+    #[test]
+    fn test_resolve_brand_selection_preferred_over_auto_select() {
+        let brands = vec![make_brand("theanine-nutricost", "l-theanine")];
+        let selections = std::collections::HashMap::from([(
+            "l-theanine".to_string(),
+            "theanine-nutricost".to_string(),
+        )]);
+        // Even with a single brand, if there's a selection, it uses the selection path
+        let result = resolve_brand("l-theanine", &brands, &selections, None);
+        assert_eq!(result.unwrap().id, "theanine-nutricost");
+    }
+
+    #[test]
+    fn test_resolve_brand_empty_brands_list() {
+        let brands: Vec<SupplementBrand> = vec![];
+        let selections = std::collections::HashMap::new();
+        assert!(resolve_brand("l-theanine", &brands, &selections, None).is_none());
+    }
+
+    #[test]
+    fn test_resolve_brand_other_type_brands_dont_interfere() {
+        // Brands exist but for other types — l-theanine should get 0 matches
+        let brands = vec![
+            make_brand("alcar-momentous", "alcar"),
+            make_brand("omega3-sr", "omega3"),
+        ];
+        let selections = std::collections::HashMap::new();
+        assert!(resolve_brand("l-theanine", &brands, &selections, None).is_none());
     }
 }

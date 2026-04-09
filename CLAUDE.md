@@ -6,7 +6,7 @@ Supplement and health tracking app. Single-user, mobile-first PWA with Rust Lamb
 
 - **Never run terraform apply, destroy, or any AWS-mutating commands.** Infrastructure changes are done by the user.
 - **Never commit secrets, .env files, or credentials.**
-- **Follow ~/src/platform/INTEGRATION.md** — the canonical source for all platform conventions.
+- **Follow ~/src/ahara/INTEGRATION.md** — the canonical source for all platform conventions.
 - **Do NOT create API Gateways, per-project VPCs, per-project LBs, per-project Cognito pools, or per-project RDS instances.**
 
 ## Architecture
@@ -105,7 +105,7 @@ Builds Lambda + frontend, runs `db-migrate`, then `terraform apply`.
 - CORS preflight (OPTIONS) has its own ALB listener rule (priority 200) with no auth.
 - Ashwagandha cycle start_date (2026-01-26) is set so that 3/23/2026 is the first day of an off-period.
 - Seeding is done via `db-seed` (platform CLI), not an API endpoint.
-- Dosekit must be registered in platform-services `migration_projects` before first `db-migrate`.
+- Dosekit must be registered in ahara-services `migration_projects` before first `db-migrate`.
 
 ## Pre-commit CI check
 
