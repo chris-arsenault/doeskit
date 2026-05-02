@@ -6,7 +6,7 @@ ci: lint format-check typecheck test
 
 lint:
 	cd frontend && pnpm exec eslint .
-	cd backend && cargo clippy -- -D warnings
+	cd backend && CARGO_TARGET_DIR=target-clippy cargo clippy --release -- -D warnings -W clippy::cognitive_complexity
 	terraform fmt -check -recursive infrastructure/terraform/
 
 lint-fix:

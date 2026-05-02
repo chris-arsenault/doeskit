@@ -40,6 +40,9 @@ export default function Compare() {
     setEditing(null);
     reload();
   }, [reload]);
+  const handleClose = useCallback(() => {
+    setEditing(null);
+  }, []);
 
   if (loading || !data) {
     return (
@@ -74,9 +77,7 @@ export default function Compare() {
           </tbody>
         </table>
       </div>
-      {editing && (
-        <EditModal product={editing} onClose={() => setEditing(null)} onSave={handleSave} />
-      )}
+      {editing && <EditModal product={editing} onClose={handleClose} onSave={handleSave} />}
     </div>
   );
 }
@@ -219,7 +220,9 @@ function EditModal({
     subscription_discount: product.subscription_discount?.toString() ?? "",
   });
 
-  const set = (k: string, v: string) => setF((prev) => ({ ...prev, [k]: v }));
+  const set = useCallback((k: string, v: string) => {
+    setF((prev) => ({ ...prev, [k]: v }));
+  }, []);
 
   const save = async () => {
     await apiPut(`/brands/${product.id}/pricing`, buildPayload(f));

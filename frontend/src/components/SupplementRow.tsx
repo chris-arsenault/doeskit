@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { useStore, type DailyDose, type SupplementBrand } from "../data/store";
 import { Check, ChevronDown } from "lucide-react";
 import styles from "./SupplementRow.module.css";
@@ -17,6 +17,13 @@ const SupplementRow = memo(function SupplementRow({ dose, altBrands }: Props) {
 
   const activeBrand = overrideBrand ?? dose.brand;
   const hasAlts = altBrands.length > 1;
+  const handleTogglePicker = useCallback(() => {
+    setShowPicker((open) => !open);
+  }, []);
+  const handleSelectBrand = useCallback((brand: SupplementBrand) => {
+    setOverrideBrand(brand);
+    setShowPicker(false);
+  }, []);
 
   return (
     <li className={styles.item}>
@@ -33,11 +40,8 @@ const SupplementRow = memo(function SupplementRow({ dose, altBrands }: Props) {
             brands={altBrands}
             active={activeBrand}
             open={showPicker}
-            onToggle={() => setShowPicker(!showPicker)}
-            onSelect={(b) => {
-              setOverrideBrand(b);
-              setShowPicker(false);
-            }}
+            onToggle={handleTogglePicker}
+            onSelect={handleSelectBrand}
             doseLabel={dose.dose_label}
           />
         ) : (

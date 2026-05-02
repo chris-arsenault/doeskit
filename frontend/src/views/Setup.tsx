@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, type FormEvent } from "react";
+import { useEffect, useState, useCallback, type ChangeEvent, type FormEvent } from "react";
 import { useStore, type SupplementType, type SupplementBrand, type Cycle } from "../data/store";
 import { apiPost, apiDelete } from "../data/api";
 import {
@@ -85,9 +85,8 @@ function NotificationsSection() {
     });
   }, []);
 
-  if (loading || !settings) return null;
-
-  const toggle = async () => {
+  const toggle = useCallback(async () => {
+    if (!settings) return;
     if (!settings.enabled) {
       const ok = await requestNotificationPermission();
       if (!ok) return;
@@ -95,13 +94,19 @@ function NotificationsSection() {
     const next = { ...settings, enabled: !settings.enabled };
     await updateNotificationSettings(next);
     setSettings(next);
-  };
+  }, [settings]);
 
-  const update = async (field: keyof NotificationSettings, value: string) => {
-    const next = { ...settings, [field]: value };
-    setSettings(next);
-    await updateNotificationSettings(next);
-  };
+  const update = useCallback(
+    async (field: keyof NotificationSettings, value: string) => {
+      if (!settings) return;
+      const next = { ...settings, [field]: value };
+      setSettings(next);
+      await updateNotificationSettings(next);
+    },
+    [settings]
+  );
+
+  if (loading || !settings) return null;
 
   return (
     <section className={shared.card}>
@@ -140,9 +145,10 @@ function NotifTimeGrid({
       {NOTIF_FIELDS.map(({ label, field }) => (
         <TimeRow
           key={field}
+          field={field}
           label={label}
           value={settings[field] as string}
-          onChange={(v) => onUpdate(field, v)}
+          onUpdate={onUpdate}
         />
       ))}
     </div>
@@ -150,23 +156,27 @@ function NotifTimeGrid({
 }
 
 function TimeRow({
+  field,
   label,
   value,
-  onChange,
+  onUpdate,
 }: {
+  field: keyof NotificationSettings;
   label: string;
   value: string;
-  onChange: (v: string) => void;
+  onUpdate: (field: keyof NotificationSettings, value: string) => void;
 }) {
+  const handleChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      onUpdate(field, event.target.value);
+    },
+    [field, onUpdate]
+  );
+
   return (
     <div className={styles.controlRow}>
       <span className={styles.controlLabel}>{label}</span>
-      <input
-        type="time"
-        className={styles.timingSelect}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
+      <input type="time" className={styles.timingSelect} value={value} onChange={handleChange} />
     </div>
   );
 }
@@ -215,6 +225,9 @@ function TypesSection({
 }) {
   const [expandedType, setExpandedType] = useState<string | null>(null);
   const activeSelections = useStore((s) => s.activeSelections);
+  const toggleExpandedType = useCallback((typeId: string) => {
+    setExpandedType((current) => (current === typeId ? null : typeId));
+  }, []);
 
   return (
     <section className={shared.card}>
@@ -224,24 +237,55 @@ function TypesSection({
       ) : (
         <ul className={styles.list}>
           {types.map((t) => {
-            const typeBrands = brands.filter((b) => b.type_id === t.id);
-            const abId = activeSelections[t.id];
-            const activeBrand = typeBrands.find((b) => b.id === abId) ?? typeBrands[0];
             return (
-              <TypeRow
+              <SupplementTypeSetupRow
                 key={t.id}
                 type_={t}
-                brands={typeBrands}
-                activeBrand={activeBrand}
-                cycle={cycles.find((c) => c.id === t.cycle_id)}
+                brands={brands}
+                cycles={cycles}
+                activeBrandId={activeSelections[t.id]}
                 expanded={expandedType === t.id}
-                onToggle={() => setExpandedType(expandedType === t.id ? null : t.id)}
+                onToggleType={toggleExpandedType}
               />
             );
           })}
         </ul>
       )}
     </section>
+  );
+}
+
+function SupplementTypeSetupRow({
+  type_,
+  brands,
+  cycles,
+  activeBrandId,
+  expanded,
+  onToggleType,
+}: {
+  type_: SupplementType;
+  brands: SupplementBrand[];
+  cycles: Cycle[];
+  activeBrandId: string | undefined;
+  expanded: boolean;
+  onToggleType: (typeId: string) => void;
+}) {
+  const typeBrands = brands.filter((brand) => brand.type_id === type_.id);
+  const activeBrand = typeBrands.find((brand) => brand.id === activeBrandId) ?? typeBrands[0];
+  const cycle = cycles.find((cycle) => cycle.id === type_.cycle_id);
+  const handleToggle = useCallback(() => {
+    onToggleType(type_.id);
+  }, [onToggleType, type_.id]);
+
+  return (
+    <TypeRow
+      type_={type_}
+      brands={typeBrands}
+      activeBrand={activeBrand}
+      cycle={cycle}
+      expanded={expanded}
+      onToggle={handleToggle}
+    />
   );
 }
 

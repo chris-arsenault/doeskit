@@ -4,7 +4,7 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::models::*;
 use crate::AppState;
@@ -54,6 +54,16 @@ struct DateQuery {
     date: Option<String>,
 }
 
+struct TodayContext {
+    types: Vec<SupplementType>,
+    brands: Vec<SupplementBrand>,
+    selections: HashMap<String, String>,
+    cycles: Vec<Cycle>,
+    day: DayLog,
+    supp_logs: Vec<SupplementLog>,
+    schedule: TrainingSchedule,
+}
+
 fn resolve_date(query: &DateQuery) -> String {
     query
         .date
@@ -66,73 +76,72 @@ async fn get_today(
     Query(query): Query<DateQuery>,
 ) -> AppResult<TodayResponse> {
     let date = resolve_date(&query);
-    let types = state.db.list_types().await.map_err(db_err)?;
-    let brands = state.db.list_brands().await.map_err(db_err)?;
-    let selections = state.db.get_active_selections().await.map_err(db_err)?;
-    let cycles = state.db.list_cycles().await.map_err(db_err)?;
-    let day = state.db.get_day(&date).await.map_err(db_err)?;
-    let supp_logs = state.db.get_supplement_logs(&date).await.map_err(db_err)?;
-    let schedule: TrainingSchedule = state
-        .db
-        .get_config("training_schedule")
+    let context = load_today_context(state.as_ref(), &date)
         .await
-        .map_err(db_err)?
-        .unwrap_or(TrainingSchedule { days: vec![] });
-
-    let is_training_day = check_training_day(&schedule, &date);
-
-    let active_types: Vec<_> = types
-        .iter()
-        .filter(|t| {
-            if !t.active {
-                return false;
-            }
-            if let Some(ref cid) = t.cycle_id {
-                if let Some(c) = cycles.iter().find(|c| c.id == *cid) {
-                    if !is_cycle_on(c, &date) {
-                        return false;
-                    }
-                }
-            }
-            true
-        })
-        .collect::<Vec<_>>();
-
-    let doses: Vec<DoseStatus> = active_types
-        .iter()
-        .filter_map(|t| {
-            let supp_log = supp_logs.iter().find(|l| l.type_id == t.id);
-            let brand = resolve_brand(&t.id, &brands, &selections, supp_log);
-            if brand.is_none() {
-                tracing::warn!(
-                    type_id = t.id.as_str(),
-                    "excluded from today: no brand resolved"
-                );
-            }
-            let brand = brand?;
-            let servings = compute_servings(t.target_dose, brand.serving_dose, &brand.form);
-            let label = format_dose_label(servings, brand.units_per_serving, &brand.unit_name);
-            Some(DoseStatus {
-                dose: DailyDose {
-                    supplement_type: (*t).clone(),
-                    brand: brand.clone(),
-                    servings_needed: servings,
-                    dose_label: label,
-                },
-                taken: supp_log.is_some_and(|l| l.taken),
-            })
-        })
-        .collect();
-
-    tracing::info!(
-        date = date.as_str(),
-        active_types = active_types.len(),
-        resolved_doses = doses.len(),
-        excluded = active_types.len() - doses.len(),
-        "today checklist built"
+        .map_err(db_err)?;
+    let is_training_day = check_training_day(&context.schedule, &date);
+    let active_types = active_types_for_date(&context.types, &context.cycles, &date);
+    let doses = build_dose_statuses(
+        &active_types,
+        &context.brands,
+        &context.selections,
+        &context.supp_logs,
     );
 
-    Ok(Json(TodayResponse {
+    log_today_summary(&date, active_types.len(), doses.len());
+
+    Ok(Json(today_response(
+        date,
+        is_training_day,
+        doses,
+        context.day,
+    )))
+}
+
+async fn load_today_context(
+    state: &AppState,
+    date: &str,
+) -> Result<TodayContext, crate::db::Error> {
+    let types = state.db.list_types().await?;
+    let brands = state.db.list_brands().await?;
+    let selections = state.db.get_active_selections().await?;
+    let cycles = state.db.list_cycles().await?;
+    let day = state.db.get_day(date).await?;
+    let supp_logs = state.db.get_supplement_logs(date).await?;
+    let schedule = state
+        .db
+        .get_config("training_schedule")
+        .await?
+        .unwrap_or(TrainingSchedule { days: vec![] });
+
+    Ok(TodayContext {
+        types,
+        brands,
+        selections,
+        cycles,
+        day,
+        supp_logs,
+        schedule,
+    })
+}
+
+fn log_today_summary(date: &str, active_count: usize, dose_count: usize) {
+    tracing::info!(
+        date,
+        active_types = active_count,
+        resolved_doses = dose_count,
+        excluded = active_count - dose_count,
+        "today checklist built"
+    );
+}
+
+fn today_response(
+    date: String,
+    is_training_day: bool,
+    doses: Vec<DoseStatus>,
+    day: DayLog,
+) -> TodayResponse {
+    TodayResponse {
         date,
         is_training_day,
         doses,
@@ -146,7 +155,79 @@ async fn get_today(
             done: day.workout_done,
             motivation: day.workout_motivation,
         },
-    }))
+    }
+}
+
+fn active_types_for_date<'a>(
+    types: &'a [SupplementType],
+    cycles: &[Cycle],
+    date: &str,
+) -> Vec<&'a SupplementType> {
+    types
+        .iter()
+        .filter(|supplement_type| is_active_type_on_date(supplement_type, cycles, date))
+        .collect()
+}
+
+fn is_active_type_on_date(supplement_type: &SupplementType, cycles: &[Cycle], date: &str) -> bool {
+    supplement_type.active && cycle_is_available(supplement_type, cycles, date)
+}
+
+fn cycle_is_available(supplement_type: &SupplementType, cycles: &[Cycle], date: &str) -> bool {
+    supplement_type
+        .cycle_id
+        .as_ref()
+        .and_then(|cycle_id| {
+            cycles
+                .iter()
+                .find(|cycle| cycle.id.as_str() == cycle_id.as_str())
+        })
+        .is_none_or(|cycle| is_cycle_on(cycle, date))
+}
+
+fn build_dose_statuses(
+    active_types: &[&SupplementType],
+    brands: &[SupplementBrand],
+    selections: &HashMap<String, String>,
+    supp_logs: &[SupplementLog],
+) -> Vec<DoseStatus> {
+    active_types
+        .iter()
+        .filter_map(|&supplement_type| {
+            build_dose_status(supplement_type, brands, selections, supp_logs)
+        })
+        .collect()
+}
+
+fn build_dose_status(
+    supplement_type: &SupplementType,
+    brands: &[SupplementBrand],
+    selections: &HashMap<String, String>,
+    supp_logs: &[SupplementLog],
+) -> Option<DoseStatus> {
+    let supp_log = supp_logs
+        .iter()
+        .find(|log| log.type_id.as_str() == supplement_type.id.as_str());
+    let Some(brand) = resolve_brand(&supplement_type.id, brands, selections, supp_log) else {
+        tracing::warn!(
+            type_id = supplement_type.id.as_str(),
+            "excluded from today: no brand resolved"
+        );
+        return None;
+    };
+
+    let servings = compute_servings(supplement_type.target_dose, brand.serving_dose, &brand.form);
+    let label = format_dose_label(servings, brand.units_per_serving, &brand.unit_name);
+
+    Some(DoseStatus {
+        dose: DailyDose {
+            supplement_type: supplement_type.clone(),
+            brand: brand.clone(),
+            servings_needed: servings,
+            dose_label: label,
+        },
+        taken: supp_log.is_some_and(|log| log.taken),
+    })
 }
 
 // ── Typed log endpoints ─────────────────────────────────────
@@ -175,19 +256,26 @@ struct SupplementBody {
     taken: bool,
 }
 
+fn mutation_status(result: Result<(), crate::db::Error>) -> StatusCode {
+    result.map_or_else(db_err, |_| StatusCode::OK)
+}
+
+fn energy_field(period: &str) -> Option<&'static str> {
+    match period {
+        "morning" => Some("energy_morning"),
+        "afternoon" => Some("energy_afternoon"),
+        "evening" => Some("energy_evening"),
+        _ => None,
+    }
+}
+
 async fn log_sleep(
     State(state): State<Arc<AppState>>,
     Query(query): Query<DateQuery>,
     Json(body): Json<ScoreBody>,
 ) -> StatusCode {
     let date = resolve_date(&query);
-    match state.db.set_day_field(&date, "sleep", body.value).await {
-        Ok(_) => StatusCode::OK,
-        Err(e) => {
-            tracing::error!("DB error: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
-    }
+    mutation_status(state.db.set_day_field(&date, "sleep", body.value).await)
 }
 
 async fn log_energy(
@@ -196,19 +284,10 @@ async fn log_energy(
     Json(body): Json<EnergyBody>,
 ) -> StatusCode {
     let date = resolve_date(&query);
-    let field = match body.period.as_str() {
-        "morning" => "energy_morning",
-        "afternoon" => "energy_afternoon",
-        "evening" => "energy_evening",
-        _ => return StatusCode::BAD_REQUEST,
+    let Some(field) = energy_field(&body.period) else {
+        return StatusCode::BAD_REQUEST;
     };
-    match state.db.set_day_field(&date, field, body.value).await {
-        Ok(_) => StatusCode::OK,
-        Err(e) => {
-            tracing::error!("DB error: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        }
-    }
+    mutation_status(state.db.set_day_field(&date, field, body.value).await)
 }
 
 async fn log_workout(
@@ -217,23 +296,24 @@ async fn log_workout(
     Json(body): Json<WorkoutBody>,
 ) -> StatusCode {
     let date = resolve_date(&query);
+    mutation_status(apply_workout_log(state.as_ref(), &date, &body).await)
+}
+
+async fn apply_workout_log(
+    state: &AppState,
+    date: &str,
+    body: &WorkoutBody,
+) -> Result<(), crate::db::Error> {
     if let Some(done) = body.done {
-        if let Err(e) = state.db.set_workout_done(&date, done).await {
-            tracing::error!("DB error: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
+        state.db.set_workout_done(date, done).await?;
     }
     if let Some(motivation) = body.motivation {
-        if let Err(e) = state
+        state
             .db
-            .set_day_field(&date, "workout_motivation", motivation)
-            .await
-        {
-            tracing::error!("DB error: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
+            .set_day_field(date, "workout_motivation", motivation)
+            .await?;
     }
-    StatusCode::OK
+    Ok(())
 }
 
 async fn log_supplement(
@@ -318,9 +398,7 @@ async fn update_brand_pricing(
     }
 }
 
-async fn get_selections(
-    State(state): State<Arc<AppState>>,
-) -> AppResult<std::collections::HashMap<String, String>> {
+async fn get_selections(State(state): State<Arc<AppState>>) -> AppResult<HashMap<String, String>> {
     state
         .db
         .get_active_selections()
@@ -467,6 +545,12 @@ async fn get_compare(State(state): State<Arc<AppState>>) -> AppResult<CompareRes
 
 // ── Brand resolution ────────────────────────────────────────
 
+enum AutoBrand<'a> {
+    Single(&'a SupplementBrand),
+    None,
+    Multiple(usize),
+}
+
 /// Resolves which brand product to show for a supplement type on the today list.
 ///
 /// Priority: (1) logged brand if taken today, (2) active selection, (3) auto-select
@@ -475,64 +559,121 @@ async fn get_compare(State(state): State<Arc<AppState>>) -> AppResult<CompareRes
 fn resolve_brand<'a>(
     type_id: &str,
     brands: &'a [SupplementBrand],
-    selections: &std::collections::HashMap<String, String>,
+    selections: &HashMap<String, String>,
     supp_log: Option<&SupplementLog>,
 ) -> Option<&'a SupplementBrand> {
-    // Path 1: Use logged brand if supplement was marked taken today
-    if let Some(log) = supp_log {
-        if log.taken {
-            let brand = brands.iter().find(|b| b.id == log.brand_id);
-            if brand.is_none() {
-                tracing::warn!(
-                    type_id,
-                    brand_id = log.brand_id.as_str(),
-                    "logged brand not found in brands list (JOIN may have excluded it)"
-                );
-            }
-            return brand;
-        }
-    }
-
-    // Path 2: Use active selection
-    if let Some(selected_id) = selections.get(type_id) {
-        let brand = brands.iter().find(|b| b.id == *selected_id);
-        if brand.is_none() {
-            tracing::warn!(
-                type_id,
-                brand_id = selected_id.as_str(),
-                "active selection brand not found in brands list (JOIN may have excluded it)"
-            );
-        }
+    if let Some(brand) = logged_brand(type_id, brands, supp_log) {
         return brand;
     }
 
-    // Path 3: Auto-select when only one brand exists for this type
-    let type_brands: Vec<_> = brands.iter().filter(|b| b.type_id == type_id).collect();
-    match type_brands.len() {
-        1 => {
-            tracing::debug!(
-                type_id,
-                brand_id = type_brands[0].id.as_str(),
-                "auto-selected single brand"
-            );
-            Some(type_brands[0])
+    if let Some(brand) = selected_brand(type_id, brands, selections) {
+        return brand;
+    }
+
+    auto_selected_brand(type_id, brands)
+}
+
+fn logged_brand<'a>(
+    type_id: &str,
+    brands: &'a [SupplementBrand],
+    supp_log: Option<&SupplementLog>,
+) -> Option<Option<&'a SupplementBrand>> {
+    let log = supp_log.filter(|log| log.taken)?;
+    let brand = brand_by_id(brands, &log.brand_id);
+    warn_missing_logged_brand(type_id, &log.brand_id, brand);
+    Some(brand)
+}
+
+fn selected_brand<'a>(
+    type_id: &str,
+    brands: &'a [SupplementBrand],
+    selections: &HashMap<String, String>,
+) -> Option<Option<&'a SupplementBrand>> {
+    selections.get(type_id).map(|selected_id| {
+        let brand = brand_by_id(brands, selected_id);
+        warn_missing_active_selection(type_id, selected_id, brand);
+        brand
+    })
+}
+
+fn brand_by_id<'a>(brands: &'a [SupplementBrand], brand_id: &str) -> Option<&'a SupplementBrand> {
+    brands.iter().find(|brand| brand.id.as_str() == brand_id)
+}
+
+fn warn_missing_logged_brand(type_id: &str, brand_id: &str, brand: Option<&SupplementBrand>) {
+    if brand.is_none() {
+        tracing::warn!(
+            type_id,
+            brand_id,
+            "logged brand not found in brands list (JOIN may have excluded it)"
+        );
+    }
+}
+
+fn warn_missing_active_selection(type_id: &str, brand_id: &str, brand: Option<&SupplementBrand>) {
+    if brand.is_none() {
+        tracing::warn!(
+            type_id,
+            brand_id,
+            "active selection brand not found in brands list (JOIN may have excluded it)"
+        );
+    }
+}
+
+fn auto_selected_brand<'a>(
+    type_id: &str,
+    brands: &'a [SupplementBrand],
+) -> Option<&'a SupplementBrand> {
+    match classify_auto_brand(type_id, brands) {
+        AutoBrand::Single(brand) => {
+            log_auto_selected_brand(type_id, brand);
+            Some(brand)
         }
-        0 => {
-            tracing::warn!(
-                type_id,
-                "no brands in list for this type (brands table JOIN may have filtered them out)"
-            );
+        AutoBrand::None => {
+            warn_no_brands_for_type(type_id);
             None
         }
-        n => {
-            tracing::warn!(
-                type_id,
-                brand_count = n,
-                "multiple brands, no active selection — cannot auto-select"
-            );
+        AutoBrand::Multiple(count) => {
+            warn_multiple_brands_for_type(type_id, count);
             None
         }
     }
+}
+
+fn classify_auto_brand<'a>(type_id: &str, brands: &'a [SupplementBrand]) -> AutoBrand<'a> {
+    let mut type_brands = brands
+        .iter()
+        .filter(|brand| brand.type_id.as_str() == type_id);
+    let first = type_brands.next();
+
+    match (first, type_brands.next()) {
+        (Some(brand), None) => AutoBrand::Single(brand),
+        (None, _) => AutoBrand::None,
+        (Some(_), Some(_)) => AutoBrand::Multiple(2 + type_brands.count()),
+    }
+}
+
+fn log_auto_selected_brand(type_id: &str, brand: &SupplementBrand) {
+    tracing::debug!(
+        type_id,
+        brand_id = brand.id.as_str(),
+        "auto-selected single brand"
+    );
+}
+
+fn warn_no_brands_for_type(type_id: &str) {
+    tracing::warn!(
+        type_id,
+        "no brands in list for this type (brands table JOIN may have filtered them out)"
+    );
+}
+
+fn warn_multiple_brands_for_type(type_id: &str, brand_count: usize) {
+    tracing::warn!(
+        type_id,
+        brand_count,
+        "multiple brands, no active selection — cannot auto-select"
+    );
 }
 
 // ── Dose computation ────────────────────────────────────────
